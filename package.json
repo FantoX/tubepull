@@ -1,6 +1,6 @@
 {
   "name": "tubepull",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Download YouTube video or audio at any available quality from Node.js or the command line. Bundled ffmpeg, no Python.",
   "keywords": [
     "youtube",
@@ -44,7 +44,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "tubepull": "./dist/cli.js"
+    "tubepull": "dist/cli.js"
   },
   "files": [
     "dist",

@@ -1,5 +1,9 @@
 # tubepull
 
+## 1.0.1 - 2026-10-25
+
+- Normalize the CLI executable path in the npm package metadata.
+
 ## 1.0.0 - 2026-10-25
 
 - Initial release: library (`TubePull`) and CLI (`tubepull`).
