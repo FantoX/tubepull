@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      # YouTube breakage is usually fixed upstream first; ship these fast (patch release) when CI is green.
+      extractor:
+        patterns: ['youtubei.js']
+      ffmpeg:
+        patterns: ['ffmpeg-static']
+      dev:
+        dependency-type: development
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

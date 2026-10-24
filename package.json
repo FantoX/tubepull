@@ -1,0 +1,110 @@
+{
+  "name": "tubepull",
+  "version": "1.0.0",
+  "description": "Download YouTube video or audio at any available quality from Node.js or the command line. Bundled ffmpeg, no Python.",
+  "keywords": [
+    "youtube",
+    "downloader",
+    "video",
+    "audio",
+    "mp3",
+    "ffmpeg",
+    "cli",
+    "innertube"
+  ],
+  "license": "MIT",
+  "author": "FantoX",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FantoX/tubepull.git"
+  },
+  "homepage": "https://github.com/FantoX/tubepull#readme",
+  "bugs": {
+    "url": "https://github.com/FantoX/tubepull/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "tubepull": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:canary": "vitest run --config vitest.canary.config.ts",
+    "check:exports": "publint && attw --pack .",
+    "smoke:pack": "node scripts/smoke-pack.mjs",
+    "prepublishOnly": "npm run build && npm run check:exports",
+    "prepare": "husky",
+    "release": "changeset publish"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.8.1",
+    "cac": "^7.1.0",
+    "cli-progress": "^3.12.0",
+    "picocolors": "^1.1.1",
+    "youtubei.js": "^18.3.0"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "undici": "^8.12.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^3.0.3",
+    "@eslint/js": "^10.0.1",
+    "@types/cli-progress": "^3.11.6",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "publint": "^0.3.25",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": "prettier --write"
+  }
+}

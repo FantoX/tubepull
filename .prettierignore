@@ -1,0 +1,6 @@
+dist
+coverage
+node_modules
+RQ.md
+package-lock.json
+.changeset/*.md

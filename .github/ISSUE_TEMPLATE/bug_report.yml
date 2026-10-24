@@ -1,0 +1,30 @@
+name: Bug report
+description: Something does not download or behaves wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Command or code you ran, what you expected, what you got.
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Video URL
+      description: A public video that reproduces the problem.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `npx tubepull doctor`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: verbose
+    attributes:
+      label: Output with `--verbose`
+      render: text
+    validations:
+      required: true
