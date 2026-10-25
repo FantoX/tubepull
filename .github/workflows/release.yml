@@ -27,7 +27,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run check:exports
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2
         if: env.HAS_NPM_TOKEN == 'true'
         with:
           version: npx changeset version
