@@ -1,5 +1,3 @@
-//---- Section used for typed errors ----
-
 export type ErrorCode =
   | 'INVALID_URL'
   | 'INVALID_ARGUMENT'
@@ -26,10 +24,10 @@ export interface TubePullErrorOptions {
   details?: Record<string, unknown>;
 }
 
-/** Base class of every error thrown by tubepull. Check `code` rather than `instanceof` across module systems. */
+/** Check code across module systems; instanceof may use a different class copy. */
 export class TubePullError extends Error {
   readonly code: ErrorCode;
-  /** Actionable advice for the user. */
+
   readonly hint?: string;
   readonly details?: Record<string, unknown>;
 
@@ -125,8 +123,9 @@ export class BotCheckError extends TubePullError {
   constructor(message = 'YouTube asked to confirm you are not a bot', options: TubePullErrorOptions = {}) {
     super('BOT_CHECK', message, {
       hint:
-        'YouTube is challenging this network (datacenter and VPN IPs often are). Wait and retry later, or use ' +
-        'another network. Signed-in cookies (--cookies) or a PO token (--po-token) can also help.',
+        'YouTube refuses signed-out playback from this IP (most datacenter, cloud and VPN IPs; a real browser ' +
+        'there is refused too). Sign in with --cookies cookies.txt from a signed-in browser, or use --proxy ' +
+        'with a residential proxy.',
       ...options,
     });
   }
@@ -215,10 +214,7 @@ export class AbortError extends TubePullError {
   }
 }
 
-/**
- * This function is used for checking whether a value is a tubepull error, optionally of a given code.
- * Works across ESM/CJS copies of the package, unlike `instanceof`.
- */
+/** Avoid instanceof so errors work across ESM/CJS copies. */
 export function isTubePullError(value: unknown, code?: ErrorCode): value is TubePullError {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as { code?: unknown; name?: unknown };
@@ -227,25 +223,16 @@ export function isTubePullError(value: unknown, code?: ErrorCode): value is Tube
   return code === undefined ? true : candidate.code === code;
 }
 
-/**
- * This function is used for turning a DOM-style abort (or our own) into a typed AbortError.
- */
 export function toAbortError(signal?: AbortSignal, cause?: unknown): AbortError {
   const reason: unknown = signal?.reason ?? cause;
   if (isTubePullError(reason, 'ABORTED')) return reason as AbortError;
   return new AbortError(undefined, reason === undefined ? {} : { cause: reason });
 }
 
-/**
- * This function is used for throwing a typed AbortError when a signal has fired.
- */
 export function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw toAbortError(signal);
 }
 
-/**
- * This function is used for recognising abort errors from fetch, timers and our own code.
- */
 export function isAbortLike(error: unknown): boolean {
   if (isTubePullError(error, 'ABORTED')) return true;
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');

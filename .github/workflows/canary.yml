@@ -1,8 +1,6 @@
 name: Canary (live YouTube)
 
-# Real downloads against YouTube every night, so breakage is noticed before users report it.
-# GitHub-hosted runners use datacenter IPs that YouTube often bot-checks; set the optional
-# TUBEPULL_CANARY_COOKIES secret (a Netscape cookies.txt) or use a self-hosted runner for stable results.
+# Bot-checked runners may need TUBEPULL_CANARY_COOKIES or a self-hosted runner.
 
 on:
   schedule:

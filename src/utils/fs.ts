@@ -2,11 +2,6 @@ import { copyFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-//---- Section used for filesystem helpers ----
-
-/**
- * This function is used for checking whether a path exists.
- */
 export async function pathExists(file: string): Promise<boolean> {
   try {
     await stat(file);
@@ -16,9 +11,7 @@ export async function pathExists(file: string): Promise<boolean> {
   }
 }
 
-/**
- * This function is used for the size of a file, or 0 when it does not exist.
- */
+/** Missing files count as zero bytes. */
 export async function fileSize(file: string): Promise<number> {
   try {
     return (await stat(file)).size;
@@ -27,10 +20,7 @@ export async function fileSize(file: string): Promise<number> {
   }
 }
 
-/**
- * This function is used for moving a file, falling back to copy+delete across devices (EXDEV),
- * which happens when the temp dir and output dir are on different drives.
- */
+/** Copy across devices when rename fails with EXDEV. */
 export async function moveFile(from: string, to: string, overwrite: boolean): Promise<void> {
   await mkdir(path.dirname(to), { recursive: true });
   if (overwrite) await rm(to, { force: true });
@@ -44,9 +34,6 @@ export async function moveFile(from: string, to: string, overwrite: boolean): Pr
   }
 }
 
-/**
- * This function is used for removing a file or directory, ignoring errors (cleanup paths).
- */
 export async function removeQuietly(target: string): Promise<void> {
   try {
     await rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
@@ -55,10 +42,6 @@ export async function removeQuietly(target: string): Promise<void> {
   }
 }
 
-/**
- * This function is used for the per-platform cache directory
- * (`%LOCALAPPDATA%`, `~/Library/Caches`, `$XDG_CACHE_HOME`).
- */
 export function defaultCacheDir(): string {
   const home = os.homedir();
   if (process.platform === 'win32') {

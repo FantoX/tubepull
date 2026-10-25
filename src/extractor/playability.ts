@@ -16,12 +16,6 @@ import {
   toAbortError,
 } from '../errors.js';
 
-//---- Section used for mapping YouTube refusals to typed errors ----
-
-/**
- * This function is used for turning a player response's playability status into a typed error,
- * or undefined when the video is playable.
- */
 export function mapPlayability(
   status: string | undefined,
   reason: string | undefined,
@@ -69,9 +63,6 @@ const PRIORITY = [
   'EXTRACTOR',
 ];
 
-/**
- * This function is used for choosing the most informative error after every client failed.
- */
 export function mostRelevantError(errors: TubePullError[]): TubePullError {
   const ranked = [...errors].sort((a, b) => rank(a.code) - rank(b.code));
   return ranked[0] ?? new ExtractorError('No extractor client returned video data.');
@@ -82,9 +73,6 @@ function rank(code: string): number {
   return index === -1 ? PRIORITY.length : index;
 }
 
-/**
- * This function is used for classifying an exception thrown by the extraction library or fetch.
- */
 export function mapThrown(error: unknown, signal?: AbortSignal): TubePullError {
   if (isTubePullError(error)) return error;
   if (signal?.aborted) return toAbortError(signal, error);
@@ -103,9 +91,6 @@ export function mapThrown(error: unknown, signal?: AbortSignal): TubePullError {
   return new ExtractorError(message, { cause: error });
 }
 
-/**
- * This function is used for recognising connection-level failures (DNS, reset, TLS, timeouts).
- */
 export function isNetworkFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   if (error.name === 'TypeError' && /fetch failed|network/i.test(error.message)) return true;

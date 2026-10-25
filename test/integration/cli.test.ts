@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Exercises the built CLI (run `npm run build` first; CI builds before testing). Offline paths only.
+// Requires npm run build; all paths here are offline.
 const cli = path.resolve(import.meta.dirname, '../../dist/cli.js');
 const describeIfBuilt = existsSync(cli) ? describe : describe.skip;
 
@@ -28,6 +28,7 @@ describeIfBuilt('tubepull CLI', () => {
     const { code, stdout } = run('--help');
     expect(code).toBe(0);
     expect(stdout).toContain('--quality <quality>');
+    expect(stdout).toContain('--anonymous');
     expect(stdout).toContain('doctor');
     expect(stdout).toContain('Not affiliated with YouTube or Google');
   });
@@ -49,5 +50,10 @@ describeIfBuilt('tubepull CLI', () => {
     expect(stdout).toContain('ffmpeg');
     expect(stdout).toContain('youtubei.js');
     expect([0, 1]).toContain(code);
+  });
+
+  it('lets doctor disable the built-in session', () => {
+    const { stdout } = run('doctor', '--offline', '--anonymous');
+    expect(stdout).toMatch(/cookies\s+no/);
   });
 });

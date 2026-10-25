@@ -1,8 +1,6 @@
 import type { MediaFormat } from '../types.js';
 
-//---- Section used for raw format normalisation ----
-
-/** The subset of a youtubei.js `Format` that normalisation reads (kept structural for testing). */
+/** Use a structural subset of youtubei.js Format so fixtures need no library instances. */
 export interface RawFormat {
   itag: number;
   url?: string;
@@ -40,9 +38,6 @@ const HDR_TRANSFERS = new Set([
   'COLOR_TRANSFER_CHARACTERISTICS_ARIB_STD_B67',
 ]);
 
-/**
- * This function is used for splitting `video/mp4; codecs="avc1.640028, mp4a.40.2"` into its parts.
- */
 export function parseMime(mime: string): ParsedMime {
   const [essence = '', ...params] = mime.split(';');
   const [type = '', subtype = ''] = essence.trim().toLowerCase().split('/');
@@ -58,10 +53,7 @@ export function parseMime(mime: string): ParsedMime {
   return { type, subtype, codecs };
 }
 
-/**
- * This function is used for converting one raw format into a MediaFormat, or undefined when it cannot
- * be downloaded at all (DRM, OTF/segmented, captions, unknown container).
- */
+/** Ignore DRM, segmented streams, captions, and unsupported containers. */
 export function normalizeFormat(
   raw: RawFormat,
   url: string | undefined,
@@ -126,15 +118,13 @@ export function normalizeFormat(
   return format;
 }
 
-/**
- * This function is used for dropping exact duplicates (same itag and audio track) that some clients return.
- */
+/** Itag alone is not unique across audio tracks. */
 export function dedupeFormats(formats: MediaFormat[]): MediaFormat[] {
   const seen = new Map<string, MediaFormat>();
   for (const format of formats) {
     const key = `${format.itag}|${format.audioTrack?.id ?? ''}|${format.isDrc ? 1 : 0}`;
     const existing = seen.get(key);
-    // Keep the variant that is actually downloadable.
+
     if (!existing || (!existing.url && format.url)) seen.set(key, format);
   }
   return [...seen.values()];

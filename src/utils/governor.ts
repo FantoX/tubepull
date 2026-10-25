@@ -1,10 +1,7 @@
 import { toAbortError } from '../errors.js';
 import { backoffDelay, parseRetryAfter, sleep } from '../download/retry.js';
 
-//---- Section used for pacing requests to YouTube ----
-
 export interface GovernorOptions {
-  /** Requests allowed in flight at once. */
   maxConcurrent?: number;
   /** Minimum gap between the starts of two requests. */
   minIntervalMs?: number;
@@ -16,11 +13,7 @@ export const DEFAULT_GOVERNOR: Required<Omit<GovernorOptions, 'now'>> = {
   minIntervalMs: 300,
 };
 
-/**
- * Shared pacing for one TubePull instance: bounded concurrency, a minimum spacing between requests,
- * and a cooldown that every caller respects once YouTube says "slow down". Bursts are what trip rate
- * limits; a steady, modest request rate rarely does.
- */
+/** Share concurrency, spacing, and cooldowns across one instance. */
 export class RequestGovernor {
   readonly #maxConcurrent: number;
   readonly #minIntervalMs: number;
@@ -41,18 +34,11 @@ export class RequestGovernor {
     return Math.max(0, this.#cooldownUntil - this.#now());
   }
 
-  /**
-   * This function is used for pausing every request of this instance, e.g. after a 429. A longer
-   * pause never gets shortened by a later, shorter one.
-   */
+  /** A shorter pause must not shorten the active cooldown. */
   pause(ms: number): void {
     this.#cooldownUntil = Math.max(this.#cooldownUntil, this.#now() + ms);
   }
 
-  /**
-   * This function is used for running `task` once a slot is free, the spacing has elapsed and any
-   * cooldown is over.
-   */
   async run<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     await this.#acquire(signal);
     try {
@@ -101,11 +87,7 @@ const THROTTLE_STATUSES = new Set([429, 503]);
 const MAX_THROTTLE_RETRIES = 3;
 const THROTTLE_BACKOFF = { baseMs: 2_000, maxMs: 60_000 };
 
-/**
- * This function is used for routing every request through the governor. A 429/503 answer pauses the
- * whole instance (for `Retry-After`, or an exponential backoff) and the request is retried; after a few
- * attempts the throttled response is handed back so the caller can report it.
- */
+/** Retry 429/503 with an instance-wide cooldown; return the final response when retries run out. */
 export function governedFetch(fetchFn: typeof fetch, governor: RequestGovernor): typeof fetch {
   const governed = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const signal = init?.signal ?? undefined;

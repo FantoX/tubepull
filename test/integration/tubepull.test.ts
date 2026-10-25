@@ -44,7 +44,7 @@ class FakeExtractor implements Extractor {
     if (videoId !== ID && videoId !== ID2) throw new VideoUnavailableError(`No video ${videoId}`);
     const excluded = options.excludeClients ?? [];
     this.excludes.push(excluded);
-    // Like the real extractor: client A first, B once A's streams were refused.
+
     const client = excluded.includes('A') ? 'B' : 'A';
     const base = this.server().url;
     const videoPath = this.expireFirst && client === 'A' ? '/expired/video.mp4' : '/video.mp4';
@@ -258,7 +258,7 @@ describeIfFfmpeg('TubePull end to end (fake extractor, local server, real ffmpeg
     expect(avStreams(await probe(ff, result.path))).toEqual(['h264', 'aac']);
     expect(extractor.calls).toBe(2);
     expect(retries.some((r) => r.includes('403'))).toBe(true);
-    // The refused client is excluded on re-extraction, and the new client's headers are used.
+
     expect(extractor.excludes).toEqual([[], ['A']]);
     const videoRequests = server.requests.filter((r) => r.path.endsWith('video.mp4'));
     expect(

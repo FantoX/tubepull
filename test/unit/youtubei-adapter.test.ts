@@ -3,8 +3,6 @@ import { PoTokenSource } from '../../src/extractor/poToken.js';
 import { YoutubeiExtractor } from '../../src/extractor/youtubei.adapter.js';
 import type { Logger } from '../../src/types.js';
 
-// Drives the extractor's client/session logic against a fake InnerTube session (no network).
-
 type Outcome = 'ok' | 'throttled' | 'bot' | 'network' | 'sabr' | 'unavailable' | 'ratelimited';
 
 const STREAM = 'https://rr1---sn.googlevideo.com/videoplayback?itag=140&expire=9999999999';
@@ -81,7 +79,7 @@ function harness(plans: Record<string, Outcome[]>[], { failRemote = false } = {}
   const extractor = new YoutubeiExtractor({
     poTokens: new PoTokenSource({}),
     logger,
-    clients: ['VISIONOS', 'TV', 'IOS'],
+    clients: ['VISIONOS', 'MWEB', 'IOS'],
     createSession,
   });
   return { extractor, sessions, created, warnings };
@@ -110,7 +108,7 @@ describe('YoutubeiExtractor client and session handling', () => {
 
   it('renews the visitor session once when every client is bot-checked', async () => {
     const { extractor, sessions, created } = harness([
-      { VISIONOS: ['bot'], TV: ['bot'], IOS: ['bot'] },
+      { VISIONOS: ['bot'], MWEB: ['bot'], IOS: ['bot'] },
       { VISIONOS: ['ok'] },
     ]);
     const video = await extractor.getVideo('abcdefghijk');
@@ -120,7 +118,7 @@ describe('YoutubeiExtractor client and session handling', () => {
   });
 
   it('gives up with BOT_CHECK when the fresh session is bot-checked too', async () => {
-    const { extractor, sessions } = harness([{ VISIONOS: ['bot'], TV: ['bot'], IOS: ['bot'] }]);
+    const { extractor, sessions } = harness([{ VISIONOS: ['bot'], MWEB: ['bot'], IOS: ['bot'] }]);
     await expect(extractor.getVideo('abcdefghijk')).rejects.toMatchObject({ code: 'BOT_CHECK' });
     expect(sessions).toHaveLength(2);
   });
@@ -139,10 +137,10 @@ describe('YoutubeiExtractor client and session handling', () => {
   });
 
   it('prefers a later client over throttled URLs, and uses throttled ones only as a last resort', async () => {
-    const better = harness([{ VISIONOS: ['throttled'], TV: ['ok'] }]);
-    expect((await better.extractor.getVideo('abcdefghijk')).info.client).toBe('TV');
+    const better = harness([{ VISIONOS: ['throttled'], MWEB: ['ok'] }]);
+    expect((await better.extractor.getVideo('abcdefghijk')).info.client).toBe('MWEB');
 
-    const onlyThrottled = harness([{ VISIONOS: ['throttled'], TV: ['sabr'] }]);
+    const onlyThrottled = harness([{ VISIONOS: ['throttled'], MWEB: ['sabr'] }]);
     const video = await onlyThrottled.extractor.getVideo('abcdefghijk');
     expect(video.info.client).toBe('VISIONOS');
     expect(video.info.formats[0]?.url).toBeDefined();
@@ -157,14 +155,14 @@ describe('YoutubeiExtractor client and session handling', () => {
   });
 
   it('stops asking further clients once rate-limited, and does not renew the session', async () => {
-    const { extractor, sessions } = harness([{ VISIONOS: ['ratelimited'], TV: ['ok'] }]);
+    const { extractor, sessions } = harness([{ VISIONOS: ['ratelimited'], MWEB: ['ok'] }]);
     await expect(extractor.getVideo('abcdefghijk')).rejects.toMatchObject({ code: 'RATE_LIMITED' });
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.calls).toEqual(['VISIONOS']);
   });
 
   it('renews the session at most once a minute', async () => {
-    const { extractor, sessions } = harness([{ VISIONOS: ['bot'], TV: ['bot'], IOS: ['bot'] }]);
+    const { extractor, sessions } = harness([{ VISIONOS: ['bot'], MWEB: ['bot'], IOS: ['bot'] }]);
     await expect(extractor.getVideo('abcdefghijk')).rejects.toMatchObject({ code: 'BOT_CHECK' });
     expect(sessions).toHaveLength(2);
     await expect(extractor.getVideo('abcdefghijk')).rejects.toMatchObject({ code: 'BOT_CHECK' });
@@ -172,9 +170,9 @@ describe('YoutubeiExtractor client and session handling', () => {
   });
 
   it('tries refused clients last', async () => {
-    const { extractor, sessions } = harness([{ VISIONOS: ['ok'], TV: ['ok'] }]);
+    const { extractor, sessions } = harness([{ VISIONOS: ['ok'], MWEB: ['ok'] }]);
     const video = await extractor.getVideo('abcdefghijk', { excludeClients: ['visionos'] });
-    expect(video.info.client).toBe('TV');
-    expect(sessions[0]?.calls).toEqual(['TV']);
+    expect(video.info.client).toBe('MWEB');
+    expect(sessions[0]?.calls).toEqual(['MWEB']);
   });
 });

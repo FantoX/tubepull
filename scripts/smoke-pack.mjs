@@ -1,5 +1,5 @@
-// Packs the library, installs the tarball into a throwaway project and verifies that ESM, CommonJS and
-// TypeScript (node16 + bundler resolution) consumers work, and that the `tubepull` bin runs.
+// Check packed ESM, CJS, TypeScript, and CLI consumers in a temporary project.
+
 import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -16,7 +16,7 @@ console.log(
 );
 const unexpected = packed[0].files
   .map((f) => f.path)
-  // Only built code, typings and the docs users need; source maps and everything else stay out.
+  // Reject unexpected package contents, including source maps.
   .filter(
     (p) => !/^(dist\/[^/]+\.(js|cjs|d\.ts|d\.cts)|README\.md|LICENSE|CHANGELOG\.md|package\.json)$/.test(p),
   );
@@ -33,6 +33,7 @@ try {
 const yt = await TubePull.create({ cacheDir: false });
 if (parseVideoId('https://youtu.be/dQw4w9WgXcQ') !== 'dQw4w9WgXcQ') throw new Error('parseVideoId');
 if (!isTubePullError(new NoSuitableFormatError('x'))) throw new Error('errors');
+if (new NoSuitableFormatError('x').name !== 'NoSuitableFormatError') throw new Error('error name');
 const ff = await yt.resolveFfmpeg();
 console.log('esm ok, ffmpeg from', ff.source);
 `,

@@ -21,7 +21,7 @@ export interface Probe {
   attachments: number;
 }
 
-/** The ffmpeg used by tests, or undefined when none is available (tests then skip). */
+/** Skip media tests when ffmpeg is unavailable. */
 export async function testFfmpeg(): Promise<string | undefined> {
   try {
     const { path: binary } = await resolveFfmpeg();
@@ -35,9 +35,7 @@ export async function testFfmpeg(): Promise<string | undefined> {
   }
 }
 
-/**
- * This function is used for running ffmpeg and collecting stderr (exit code is returned, not thrown).
- */
+/** Return ffmpeg's exit code instead of throwing on nonzero status. */
 export function ffmpegRaw(binary: string, args: string[]): Promise<{ code: number | null; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ['-hide_banner', ...args], {
@@ -51,9 +49,6 @@ export function ffmpegRaw(binary: string, args: string[]): Promise<{ code: numbe
   });
 }
 
-/**
- * This function is used for generating short synthetic clips in the codecs YouTube serves.
- */
 export async function generateClips(binary: string, dir: string): Promise<Clips> {
   const clips: Clips = {
     dir,
@@ -127,19 +122,14 @@ export async function generateClips(binary: string, dir: string): Promise<Clips>
   return clips;
 }
 
-/**
- * This function is used for the real audio/video tracks: no cover pictures (mkv attachments are read
- * back as attached-pic video streams) and no data tracks (mp4 chapters are a QuickTime text track).
- */
+/** Exclude cover art and chapter tracks when validating media streams. */
 export function avStreams(info: Probe): string[] {
   return info.streams
     .filter((s) => (s.type === 'Video' || s.type === 'Audio') && !s.attachedPic)
     .map((s) => s.codec);
 }
 
-/**
- * This function is used for inspecting a media file with ffmpeg (ffmpeg-static ships no ffprobe).
- */
+/** ffmpeg-static ships no ffprobe, so inspect with ffmpeg. */
 export async function probe(binary: string, file: string): Promise<Probe> {
   const { stderr } = await ffmpegRaw(binary, ['-i', file]);
   const result: Probe = { durationSec: Number.NaN, streams: [], metadata: {}, chapters: 0, attachments: 0 };

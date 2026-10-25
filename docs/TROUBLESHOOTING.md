@@ -3,14 +3,29 @@
 Start with `tubepull doctor`. It checks Node, ffmpeg and its encoders, the cache and temp folders,
 connectivity to YouTube, and a live metadata request. Add its output to bug reports.
 
+The built-in playback session can expire or be revoked. Override it with `--cookies cookies.txt` (library:
+`cookies: 'cookies.txt'`) or test signed-out playback with `--anonymous` (library: `cookies: false`). A bundled
+session does not guarantee playback on a blocked network or access to restricted content.
+
 ## "YouTube asked to confirm you are not a bot" (`BOT_CHECK`, exit 4)
 
-YouTube flags many datacenter, cloud, VPN and CI IP addresses. In order of effectiveness:
+YouTube refuses signed-out playback from many datacenter, cloud (VPS hosts, Vercel, AWS), VPN and CI IP
+addresses. This is a decision about the IP, not about tubepull. Real Chrome with a valid BotGuard attestation is
+refused on such an IP too, and so is ytdl-core with its PO-token provider, so no client, header or PO token gets
+around it. `tubepull doctor` shows whether your IP is affected. Two things change YouTube's answer:
 
-1. Run from a home connection, or use `--proxy` with a residential proxy.
-2. Pass cookies from a signed-in browser: `--cookies cookies.txt`. Export them in Netscape format with a
-   "cookies.txt" browser extension. A throwaway account is recommended, because YouTube can flag accounts used for automation.
-3. Provide a PO token (see the next section).
+1. **A signed-in session.** Pass cookies from a signed-in browser: `--cookies cookies.txt`, or a raw `Cookie`
+   header value. YouTube's message asks for exactly this. Use a throwaway account, because YouTube can flag
+   accounts used for automation.
+   - Export the cookies from a private (incognito) window: sign in, export them in Netscape format with a
+     "cookies.txt" browser extension, then close the window. A browser that stays open rotates the session and
+     the exported copy stops working.
+   - If YouTube still bot-checks a signed-in request, tubepull says the cookies were treated as signed out:
+     they have expired or been rotated, so export fresh ones.
+   - Exports that only contain `__Secure-3PAPISID` are fine. tubepull derives the `SAPISID` that requests are
+     signed with from it.
+2. **Another exit IP.** `--proxy http://user:pass@host:port` with a residential proxy. All traffic goes through it,
+   because stream URLs only work from the IP that requested them.
 
 ## "YouTube is rate-limiting this network" (`RATE_LIMITED`, exit 4)
 
@@ -26,9 +41,14 @@ paused all its requests and retried a few times before telling you this.
 ## HTTP 403 during download / "PO token required" (`NETWORK` / `PO_TOKEN`, exit 4)
 
 Some clients (IOS, MWEB, ANDROID_VR) return stream URLs that YouTube refuses with 403 unless a Proof-of-Origin
-token is attached. tubepull asks VISIONOS first because its streams don't need one. When a client's streams are
-refused, tubepull re-extracts from another client and resumes the download. You only see this error once every
-client has been refused. Run with `-v` to see which clients were tried.
+token is attached. tubepull asks VISIONOS first because its streams don't need one, then TV and WEB_EMBEDDED,
+which don't need one either. When a client's streams are refused, tubepull re-extracts from another client and
+resumes the download. You only see this error once every client has been refused. Run with `-v` to see which
+clients were tried.
+
+TV and WEB_EMBEDDED answers can carry an enforced preroll ad, and YouTube refuses their streams with 403 until
+it would have finished. tubepull waits that long (usually 3–10 s) before the first request, and `-v` shows
+`streams served after a 5.0s enforced preroll`.
 
 - Update first: `npm i -g tubepull@latest`. YouTube changes clients, and fixes ship as patch releases.
 - If `-v` shows `VISIONOS: LOGIN_REQUIRED Sign in to confirm you're not a bot`, your network is being bot-checked.

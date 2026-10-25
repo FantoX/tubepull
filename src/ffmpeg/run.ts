@@ -1,8 +1,6 @@
 import { spawn } from 'node:child_process';
 import { FfmpegError, FfmpegNotFoundError, toAbortError } from '../errors.js';
 
-//---- Section used for running ffmpeg ----
-
 export interface RunFfmpegOptions {
   /** Expected output duration, for percentage progress. */
   durationSec?: number;
@@ -12,10 +10,7 @@ export interface RunFfmpegOptions {
 
 const STDERR_LINES = 40;
 
-/**
- * This function is used for reading one `key=value` line of ffmpeg's `-progress` output as seconds
- * processed (out_time_us; out_time_ms is also microseconds despite its name), or `end`.
- */
+/** ffmpeg reports both out_time_us and out_time_ms in microseconds. */
 export function parseProgressLine(line: string): { outTimeSec?: number; end?: boolean } {
   const index = line.indexOf('=');
   if (index === -1) return {};
@@ -29,10 +24,7 @@ export function parseProgressLine(line: string): { outTimeSec?: number; end?: bo
   return {};
 }
 
-/**
- * This function is used for running ffmpeg with an argument array (never a shell string, so paths with
- * spaces/unicode are safe), reporting progress, and killing the process when the signal aborts.
- */
+/** Spawn directly so filenames never pass through a shell. */
 export function runFfmpeg(binary: string, args: string[], options: RunFfmpegOptions = {}): Promise<void> {
   const { durationSec, signal, onProgress } = options;
   if (signal?.aborted) return Promise.reject(toAbortError(signal));
@@ -126,9 +118,6 @@ export function runFfmpeg(binary: string, args: string[], options: RunFfmpegOpti
   });
 }
 
-/**
- * This function is used for capturing ffmpeg's stdout for informational commands (`-version`, `-encoders`).
- */
 export function captureFfmpeg(binary: string, args: string[], timeoutMs = 15_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ['-hide_banner', ...args], {
@@ -159,10 +148,7 @@ export interface FfmpegCapabilities {
 
 const capabilityCache = new Map<string, Promise<FfmpegCapabilities>>();
 
-/**
- * This function is used for reading ffmpeg's version and encoder list (cached per binary), so audio
- * conversion can fall back when an encoder such as libmp3lame is missing from a build.
- */
+/** Cache version and encoder support per binary. */
 export function probeFfmpeg(binary: string): Promise<FfmpegCapabilities> {
   let cached = capabilityCache.get(binary);
   if (!cached) {

@@ -77,7 +77,7 @@ describe('chunked download engine', () => {
     ]);
     expect(s.requests.every((r) => r.query.get('sig') === '1')).toBe(true);
     expect(progress.at(-1)).toBe(SIZE);
-    // The .part file and sidecar are gone after completion.
+
     await expect(stat(path.join(dir, 'out.bin.part'))).rejects.toThrow();
   });
 
@@ -108,7 +108,7 @@ describe('chunked download engine', () => {
     const { data } = await download(s, {}, { onRetry: (r) => retries.push(r.reason) });
     expect(sha(data)).toBe(sha(DATA));
     expect(retries).toHaveLength(1);
-    // The retry continues exactly where the dropped response stopped.
+
     expect(s.requests[2]?.start).toBe(CHUNK + 300_000);
     expect(s.bytesServed()).toBe(SIZE);
   });
@@ -167,6 +167,35 @@ describe('chunked download engine', () => {
     const fresh = s.requests.filter((r) => r.path === '/fresh');
     expect(fresh.length).toBeGreaterThan(0);
     expect(fresh.every((r) => r.headers['user-agent'] === 'client-b')).toBe(true);
+  });
+
+  it('waits for playableAt (enforced preroll) before the first request, and again after a refresh', async () => {
+    const s = await serve({
+      fault: ({ path: p }) =>
+        p === '/media' && s.requests.length > 1 ? { kind: 'status', status: 403 } : undefined,
+    });
+    const times: { path: string; at: number }[] = [];
+    const timedFetch = ((input: string | URL | Request, init?: RequestInit) => {
+      times.push({ path: new URL(String(input)).pathname, at: Date.now() });
+      return fetch(input, init);
+    }) as typeof fetch;
+    const firstPlayable = Date.now() + 300;
+    let freshPlayable = 0;
+    const { data } = await download(
+      s,
+      {
+        playableAt: firstPlayable,
+        refresh: async () => {
+          freshPlayable = Date.now() + 300;
+          return { url: `${s.url}/fresh?sig=2`, playableAt: freshPlayable };
+        },
+      },
+      { fetch: timedFetch },
+    );
+    expect(sha(data)).toBe(sha(DATA));
+    expect(times[0]!.at).toBeGreaterThanOrEqual(firstPlayable);
+    const firstFresh = times.find((t) => t.path === '/fresh');
+    expect(firstFresh!.at).toBeGreaterThanOrEqual(freshPlayable);
   });
 
   it('fails with NetworkError when 403 persists after refreshes', async () => {

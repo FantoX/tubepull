@@ -3,14 +3,10 @@ import path from 'node:path';
 import pc from 'picocolors';
 import { defaultCacheDir } from '../utils/fs.js';
 
-//---- Section used for the "newer version available" notice ----
-
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const TIMEOUT_MS = 1_500;
 
-/**
- * This function is used for comparing dotted versions numerically (pre-release tags are ignored).
- */
+/** Compare numeric versions, ignoring prerelease labels. */
 export function isNewer(latest: string, current: string): boolean {
   const parse = (v: string) =>
     v
@@ -27,10 +23,7 @@ export function isNewer(latest: string, current: string): boolean {
   return false;
 }
 
-/**
- * This function is used for checking npm for a newer release at most once a day. Never throws and
- * never delays the CLI by more than the timeout; opt out with TUBEPULL_NO_UPDATE_CHECK=1.
- */
+/** Cache daily; failures stay silent and requests time out after 1.5 seconds. */
 export async function checkForUpdate(name: string, current: string): Promise<string | undefined> {
   if (process.env.TUBEPULL_NO_UPDATE_CHECK || process.env.CI || !process.stderr.isTTY) return undefined;
   const stateFile = path.join(defaultCacheDir(), 'update-check.json');

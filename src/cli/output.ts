@@ -2,8 +2,6 @@ import pc from 'picocolors';
 import { isTubePullError, type ErrorCode } from '../errors.js';
 import type { Logger } from '../types.js';
 
-//---- Section used for terminal output and exit codes ----
-
 export const EXIT = {
   OK: 0,
   GENERIC: 1,
@@ -33,25 +31,16 @@ const EXIT_BY_CODE: Partial<Record<ErrorCode, number>> = {
   ABORTED: EXIT.CANCELLED,
 };
 
-/**
- * This function is used for the process exit code of an error (see docs/CLI.md).
- */
 export function exitCodeFor(error: unknown): number {
   if (isTubePullError(error)) return EXIT_BY_CODE[error.code] ?? EXIT.GENERIC;
   if (error instanceof Error && error.name === 'CACError') return EXIT.INVALID_ARGS;
   return EXIT.GENERIC;
 }
 
-/**
- * This function is used for a count with its noun, e.g. `1 video`, `3 videos`.
- */
 export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-/**
- * This function is used for whether prompts, spinners and live bars can be used.
- */
 export function isInteractiveTerminal(): boolean {
   return Boolean(process.stdin.isTTY && process.stderr.isTTY) && !process.env.CI;
 }
@@ -68,9 +57,6 @@ export function warn(message: string): void {
   process.stderr.write(`${pc.yellow('!')} ${pc.yellow(message)}\n`);
 }
 
-/**
- * This function is used for printing an error with its actionable hint, plus causes and stack when verbose.
- */
 export function printError(error: unknown, verbose: boolean): void {
   if (isTubePullError(error, 'ABORTED')) {
     process.stderr.write(`${pc.yellow('Cancelled.')}\n`);
@@ -95,9 +81,6 @@ export function printError(error: unknown, verbose: boolean): void {
   if (cause !== undefined && !(cause instanceof Error)) process.stderr.write(`${pc.dim(String(cause))}\n`);
 }
 
-/**
- * This function is used for the --verbose logger (stderr, dimmed).
- */
 export function createStderrLogger(verbose: boolean): Logger {
   const write = (level: string, message: string, args: unknown[]) => {
     const extra = args.length
@@ -113,17 +96,11 @@ export function createStderrLogger(verbose: boolean): Logger {
   };
 }
 
-/**
- * This function is used for the printable width of a string, ignoring ANSI colour codes.
- */
 export function visibleLength(value: string): number {
   // eslint-disable-next-line no-control-regex
   return value.replace(/\u001b\[[0-9;]*m/g, '').length;
 }
 
-/**
- * This function is used for rendering rows as aligned columns.
- */
 export function table(rows: string[][], gap = 2): string {
   const widths: number[] = [];
   for (const row of rows)

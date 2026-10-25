@@ -7,16 +7,10 @@ import { EXIT, exitCodeFor, printError } from './output.js';
 import { runDownloadCommand } from './run.js';
 import { checkForUpdate } from './update.js';
 
-//---- Section used for the CLI entry point ----
-
 const DISCLAIMER =
   'For personal use with content you own, public-domain or Creative Commons material, or where you have\n' +
   "permission. Respect YouTube's Terms of Service and copyright law. Not affiliated with YouTube or Google.";
 
-/**
- * This function is used for wiring commands and flags, running the matched command, and returning the
- * process exit code.
- */
 export async function main(argv: string[]): Promise<number> {
   const cli = cac('tubepull');
   let exitCode: number = EXIT.OK;
@@ -42,7 +36,8 @@ export async function main(argv: string[]): Promise<number> {
     .option('--json', 'Print video/playlist info as JSON, then exit')
     .option('--playlist', 'For links with both v= and list=, download the whole playlist')
     .option('--concurrency <n>', 'Parallel downloads for playlists/multiple links (default: 2)')
-    .option('--cookies <file>', 'Netscape cookies.txt for age-restricted/private/members content')
+    .option('--cookies <file>', 'Override the built-in session with your own Netscape cookies.txt')
+    .option('--anonymous', 'Disable the built-in session and use signed-out playback')
     .option('--proxy <url>', 'HTTP(S) proxy (default: HTTPS_PROXY / HTTP_PROXY)')
     .option('--po-token <token>', 'Proof-of-Origin token (requires --visitor-data)')
     .option('--visitor-data <data>', 'Visitor data the PO token was minted for')
@@ -67,10 +62,12 @@ export async function main(argv: string[]): Promise<number> {
     .command('doctor', 'Check Node, ffmpeg, cache and YouTube connectivity (attach to bug reports)')
     .option('--offline', 'Skip network checks')
     .option('--cookies <file>', 'Cookies file to test with')
+    .option('--anonymous', 'Test signed-out playback without the built-in session')
     .option('--proxy <url>', 'Proxy to test with')
     .action(async (flags: RawFlags & { offline?: boolean }) => {
       const { instance } = parseFlags({
         ...(flags.cookies ? { cookies: flags.cookies } : {}),
+        ...(flags.anonymous ? { anonymous: true } : {}),
         ...(flags.proxy ? { proxy: flags.proxy } : {}),
       });
       exitCode = await runDoctor(pkg.version, instance, Boolean(flags.offline));

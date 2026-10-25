@@ -10,19 +10,12 @@ import type { TubePullOptions } from '../types.js';
 import { defaultCacheDir } from '../utils/fs.js';
 import { table } from './output.js';
 
-//---- Section used for `tubepull doctor` ----
-
-/** A stable, short, public video used for the live extraction check. */
 const PROBE_VIDEO = 'jNQXAC9IVRw';
 
 type Status = 'ok' | 'warn' | 'fail';
 
 const MARK: Record<Status, string> = { ok: pc.green('✔'), warn: pc.yellow('!'), fail: pc.red('✖') };
 
-/**
- * This function is used for printing environment diagnostics (for bug reports) and returning the
- * exit code: 0 when downloads should work, 1 otherwise.
- */
 export async function runDoctor(
   version: string,
   instance: TubePullOptions,
@@ -75,6 +68,8 @@ export async function runDoctor(
     add('fail', 'temp dir', `not writable: ${(error as Error).message}`);
   }
 
+  add('ok', 'proxy', instance.proxy ? withoutCredentials(instance.proxy) : 'none');
+
   try {
     const details = await yt.describeExtractor();
     for (const [key, value] of Object.entries(details)) add('ok', key, value);
@@ -101,10 +96,21 @@ export async function runDoctor(
       );
     } catch (error) {
       const code = isTubePullError(error) ? ` [${error.code}]` : '';
-      add('fail', 'extraction', `${(error as Error).message}${code}`);
+      const hint = isTubePullError(error) && error.hint ? `\n  → ${error.hint}` : '';
+      add('fail', 'extraction', `${(error as Error).message}${code}${hint}`);
     }
   }
 
   process.stdout.write(`${table(rows)}\n`);
   return failed ? 1 : 0;
+}
+
+/** Exclude proxy credentials from diagnostic output. */
+function withoutCredentials(proxy: string): string {
+  try {
+    const url = new URL(proxy);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return 'invalid URL';
+  }
 }

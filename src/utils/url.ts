@@ -1,7 +1,5 @@
 import { InvalidUrlError } from '../errors.js';
 
-//---- Section used for YouTube URL parsing ----
-
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const PLAYLIST_ID = /^[A-Za-z0-9_-]{2,}$/;
 
@@ -15,7 +13,6 @@ const YOUTUBE_HOSTS = new Set([
   'www.youtube-nocookie.com',
 ]);
 
-/** Path prefixes whose next segment is the video ID. */
 const ID_PATH_PREFIXES = ['shorts', 'embed', 'live', 'v', 'e', 'watch'];
 
 export interface ParsedTarget {
@@ -23,18 +20,11 @@ export interface ParsedTarget {
   playlistId?: string;
 }
 
-/**
- * This function is used for checking whether a string is a well-formed 11-character video ID.
- */
 export function isVideoId(value: string): boolean {
   return VIDEO_ID.test(value);
 }
 
-/**
- * This function is used for extracting the video and/or playlist ID from any YouTube URL form
- * (watch, youtu.be, shorts, embed, live, music, nocookie) or a bare video ID.
- * Returns an empty object when nothing is recognised.
- */
+/** Unrecognized input returns an empty target. */
 export function parseTarget(input: string): ParsedTarget {
   const raw = input.trim();
   if (VIDEO_ID.test(raw)) return { videoId: raw };
@@ -74,18 +64,12 @@ export function parseTarget(input: string): ParsedTarget {
   return result;
 }
 
-/**
- * This function is used for resolving a URL or bare ID to a video ID, throwing InvalidUrlError otherwise.
- */
 export function parseVideoId(input: string): string {
   const { videoId } = parseTarget(input);
   if (!videoId) throw new InvalidUrlError(input);
   return videoId;
 }
 
-/**
- * This function is used for building the canonical watch URL for a video ID.
- */
 export function watchUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }

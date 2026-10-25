@@ -4,8 +4,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TubePull } from '../../src/index.js';
 
-// Live tests against YouTube, run nightly by .github/workflows/canary.yml (never by `npm test`).
-// Targets are short, stable, public videos. Failures here are the early warning that YouTube changed.
+// Live YouTube checks run separately from npm test.
+
 const TARGETS = {
   // "Me at the zoo" — 19 s, the first YouTube upload.
   short: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',

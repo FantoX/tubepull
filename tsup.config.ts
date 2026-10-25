@@ -1,7 +1,6 @@
 import { defineConfig } from 'tsup';
 
-// Optional dependencies are not externalised by default; ffmpeg-static must stay a real package
-// because it locates its binary relative to its own directory.
+// Keep ffmpeg-static external: it resolves its binary relative to its package directory.
 const external = ['youtubei.js', 'ffmpeg-static', 'undici'];
 
 export default defineConfig([
@@ -16,6 +15,8 @@ export default defineConfig([
     shims: true,
     splitting: false,
     treeshake: true,
+    minify: true,
+    keepNames: true,
     external,
   },
   {
@@ -27,6 +28,8 @@ export default defineConfig([
     target: 'node22',
     platform: 'node',
     splitting: false,
+    minify: true,
+    keepNames: true,
     external,
     banner: { js: '#!/usr/bin/env node' },
   },

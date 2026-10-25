@@ -6,11 +6,6 @@ import { formatBytes } from '../utils/bytes.js';
 import { formatDuration } from '../utils/time.js';
 import { plural, table } from './output.js';
 
-//---- Section used for rendering info, lists and JSON ----
-
-/**
- * This function is used for the one-line summary under a title: channel · duration · views.
- */
 export function summaryLine(info: VideoInfo): string {
   const parts = [info.author, formatDuration(info.durationSec)];
   if (info.viewCount !== undefined) parts.push(`${info.viewCount.toLocaleString('en-US')} views`);
@@ -18,9 +13,6 @@ export function summaryLine(info: VideoInfo): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-/**
- * This function is used for the `--list` view: qualities, audio options and the raw itag table.
- */
 export function renderFormatList(info: VideoInfo): string {
   const out: string[] = [];
   out.push(pc.bold(info.title), pc.dim(`${summaryLine(info)} · ${info.id}`), '');
@@ -97,16 +89,10 @@ export function renderFormatList(info: VideoInfo): string {
   return out.join('\n');
 }
 
-/**
- * This function is used for the `--json` view of a video (stable, machine-readable).
- */
 export function infoToJson(info: VideoInfo): string {
   return JSON.stringify(info, null, 2);
 }
 
-/**
- * This function is used for listing a playlist's entries.
- */
 export function renderPlaylist(playlist: PlaylistInfo): string {
   const rows = playlist.entries.map((e, i) => [
     pc.dim(String(i + 1).padStart(3)),

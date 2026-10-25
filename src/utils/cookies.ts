@@ -1,8 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { InvalidArgumentError } from '../errors.js';
 
-//---- Section used for cookie loading ----
-
 export interface NetscapeCookie {
   domain: string;
   includeSubdomains: boolean;
@@ -13,10 +11,7 @@ export interface NetscapeCookie {
   value: string;
 }
 
-/**
- * This function is used for parsing a Netscape/Mozilla `cookies.txt` file (as exported by browser
- * extensions and yt-dlp). `#HttpOnly_` prefixed lines are kept; comments and malformed lines are skipped.
- */
+/** Netscape exports may prefix HttpOnly rows with #HttpOnly_. */
 export function parseNetscapeCookies(text: string): NetscapeCookie[] {
   const cookies: NetscapeCookie[] = [];
   for (const rawLine of text.split(/\r?\n/)) {
@@ -48,10 +43,7 @@ export function parseNetscapeCookies(text: string): NetscapeCookie[] {
   return cookies;
 }
 
-/**
- * This function is used for building a `Cookie` header for youtube.com from parsed cookies,
- * dropping expired ones and cookies for other domains.
- */
+/** Ignore expired cookies and domains outside youtube.com. */
 export function toYouTubeCookieHeader(cookies: NetscapeCookie[], nowSec = Date.now() / 1000): string {
   const seen = new Map<string, string>();
   for (const cookie of cookies) {
@@ -60,17 +52,29 @@ export function toYouTubeCookieHeader(cookies: NetscapeCookie[], nowSec = Date.n
     if (cookie.expires > 0 && cookie.expires < nowSec) continue;
     seen.set(cookie.name, cookie.value);
   }
-  return [...seen].map(([name, value]) => `${name}=${value}`).join('; ');
+  return withSapisid([...seen].map(([name, value]) => `${name}=${value}`).join('; '));
 }
 
-/**
- * This function is used for resolving the `cookies` option: a path to a cookies.txt file, or a raw
- * `name=value; ...` header string.
- */
+export function cookieValue(header: string, name: string): string | undefined {
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq > 0 && part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+  }
+  return undefined;
+}
+
+/** Use __Secure-3PAPISID when browser exports omit SAPISID. */
+export function withSapisid(header: string): string {
+  if (cookieValue(header, 'SAPISID')) return header;
+  const fallback = cookieValue(header, '__Secure-3PAPISID');
+  return fallback ? `${header}; SAPISID=${fallback}` : header;
+}
+
+/** Accept a Netscape cookie-file path or a raw Cookie header. */
 export async function loadCookies(input: string): Promise<string> {
   const value = input.trim();
   const looksLikeHeader = /^[^\s=;/\\]+=[^;]*(;\s*[^\s=;]+=[^;]*)*;?$/.test(value) && !/\.txt$/i.test(value);
-  if (looksLikeHeader) return value;
+  if (looksLikeHeader) return withSapisid(value);
 
   let text: string;
   try {

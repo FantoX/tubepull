@@ -1,11 +1,6 @@
 import { InvalidArgumentError } from '../errors.js';
 
-//---- Section used for time parsing ----
-
-/**
- * This function is used for parsing a time given as seconds (`90`, `"90.5"`) or a clock string
- * (`"1:30"`, `"01:01:30.250"`) into seconds.
- */
+/** Accept seconds or H:MM:SS[.sss]. */
 export function parseTime(input: string | number): number {
   if (typeof input === 'number') {
     if (!Number.isFinite(input) || input < 0) throw new InvalidArgumentError(`Invalid time: ${input}`);
@@ -23,9 +18,6 @@ export function parseTime(input: string | number): number {
   return Number(h ?? 0) * 3600 + minutes * 60 + seconds;
 }
 
-/**
- * This function is used for formatting seconds as `H:MM:SS` (or `M:SS` under an hour).
- */
 export function formatDuration(totalSec: number): string {
   if (!Number.isFinite(totalSec) || totalSec < 0) return '--:--';
   const sec = Math.floor(totalSec);
@@ -36,9 +28,6 @@ export function formatDuration(totalSec: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
-/**
- * This function is used for formatting seconds as an ffmpeg timestamp `HH:MM:SS.mmm`.
- */
 export function toFfmpegTime(totalSec: number): string {
   const ms = Math.round(totalSec * 1000);
   const h = Math.floor(ms / 3_600_000);
@@ -54,10 +43,7 @@ export interface ResolvedRange {
   endSec?: number;
 }
 
-/**
- * This function is used for validating a user time range against the video duration.
- * Returns undefined when the range covers the whole video.
- */
+/** Return undefined when the range covers the whole video. */
 export function resolveRange(
   range: { start?: string | number; end?: string | number } | undefined,
   durationSec: number,

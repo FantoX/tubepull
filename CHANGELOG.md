@@ -1,5 +1,15 @@
 # tubepull
 
+## 1.1.0 - 2026-10-25
+
+- Add default playback sessions. User cookies override the default; `--anonymous` or `cookies: false` selects signed-out playback.
+- Restore TV and WEB_EMBEDDED playback clients and fill missing TV metadata from WEB.
+- Wait for required prerolls and preserve playback timing when refreshing stream URLs.
+- Fix proxy requests that receive native Node.js `Request` objects.
+- Accept signed-in cookie exports that provide only `__Secure-3PAPISID`; improve expired-session diagnostics.
+- Minify distributed JavaScript while preserving public error names.
+- Shorten documentation and code comments; add cookie-file and environment-variable examples.
+
 ## 1.0.1 - 2026-10-25
 
 - Normalize the CLI executable path in the npm package metadata.

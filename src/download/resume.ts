@@ -3,15 +3,10 @@ import { NetworkError } from '../errors.js';
 import { fileSize, moveFile } from '../utils/fs.js';
 import { fetchMediaChunks, type ChunkStreamOptions } from './chunked.js';
 
-//---- Section used for resumable file downloads ----
-
 export interface FileDownloadOptions extends Omit<ChunkStreamOptions, 'start' | 'onTotal'> {
   /** Final path. Bytes go to `<file>.part` and are renamed on completion. */
   file: string;
-  /**
-   * Identity of the remote content (e.g. video id + itag + last-modified + size). A leftover `.part`
-   * is only resumed when it was written for the same identity.
-   */
+  /** Resume a .part file only when its content identity matches. */
   identity?: string;
   onProgress?: (bytes: number, total: number | undefined) => void;
 }
@@ -21,11 +16,6 @@ export interface FileDownloadResult {
   bytes: number;
 }
 
-/**
- * This function is used for downloading a media source to a file with resume: an existing `.part`
- * for the same content continues from its last byte, and in-process retries never re-download
- * bytes already written.
- */
 export async function downloadToFile(options: FileDownloadOptions): Promise<FileDownloadResult> {
   const { file, identity, onProgress, ...chunkOptions } = options;
   const part = `${file}.part`;

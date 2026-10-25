@@ -19,6 +19,7 @@
   <a href="#install">Install</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="#library">Library</a> ·
+  <a href="#running-on-a-server-vps-vercel">VPS &amp; Vercel</a> ·
   <a href="https://github.com/FantoX/tubepull/blob/main/docs/API.md">API reference</a> ·
   <a href="https://github.com/FantoX/tubepull/blob/main/docs/CLI.md">CLI reference</a> ·
   <a href="https://github.com/FantoX/tubepull/blob/main/docs/TROUBLESHOOTING.md">Troubleshooting</a>
@@ -101,115 +102,57 @@ npm i tubepull        # library
 ## Command line
 
 ```bash
-tubepull                                   # interactive wizard
-tubepull <url>                             # wizard from the quality step
-tubepull <url> -q 1080p -o ./downloads     # no prompts
-tubepull <url> -f mp3 -b 320k              # audio only, as mp3
-tubepull <url> --start 1:00 --end 2:30     # trim
-tubepull <url> --list                      # available qualities and formats
-tubepull <url> --json                      # machine-readable info
+tubepull                                  # interactive wizard
+tubepull <url> -q 1080p -o ./downloads     # video
+tubepull <url> -f mp3                     # audio
+tubepull <url> -f mp3 --cookies ./cookies.txt
+tubepull <url> --list                     # available qualities
 tubepull <playlist-url> -q 720p --concurrency 3
-tubepull doctor                            # environment check, for bug reports
+tubepull doctor                          # diagnostics
 ```
 
-<details open>
-<summary><b>Example: a full interactive session</b></summary>
+Run `tubepull` without arguments to choose a link, format and destination interactively. Add `--yes` to
+skip prompts. Normal playlists support `--playlist`; YouTube Mix links download only the selected video.
 
-<br>
-
-Run `tubepull` with no arguments, paste a link, and answer a few questions:
-
-```text
-$ tubepull
-┌   tubepull
-│
-◇  Paste a YouTube link
-│  https://www.youtube.com/watch?v=VeUiVCb7ZmQ&list=RDVeUiVCb7ZmQ&start_radio=1
-│
-◇  1 video
-│
-◇  6 qualities, 5 audio formats
-│
-◇  Video ──────────────────────────────────────────────────────────────────────────────╮
-│                                                                                      │
-│  NSYNC - Bye Bye Bye (Music Video) Deadpool & Wolverine Opening Scene Soundtrack MV  │
-│  The Wizard · 3:21 · 18,077,568 views                                                │
-│                                                                                      │
-├──────────────────────────────────────────────────────────────────────────────────────╯
-│
-◇  What do you want?
-│  Video
-│
-◇  Quality
-│  1080p
-│
-◇  Container
-│  mp4
-│
-◇  Save to folder
-│  C:\Users\you\Videos
-│
-◇  Filename
-│  {title} [{id}]
-│
-◇  Extras (space to toggle, enter to confirm)
-│  Embed metadata
-audio   ████████████████████████ 100%  3.1 MB/3.1 MB  1.2 MB/s  ETA 0:00
-video   ████████████████████████ 100%  32.5 MB/32.5 MB  3.7 MB/s  ETA 0:00
-merge   ████████████████████████ 100%
-✔ Saved C:\Users\you\Videos\NSYNC - Bye Bye Bye (Music Video) Deadpool & Wolverine Opening Scene Soundtrack MV [VeUiVCb7ZmQ].mp4 (35.7 MB, 1080p avc1 + 130k mp4a) in 0:10
-C:\Users\you\Videos\NSYNC - Bye Bye Bye (Music Video) Deadpool & Wolverine Opening Scene Soundtrack MV [VeUiVCb7ZmQ].mp4
-│
-◇  Open the folder?
-│  No
-│
-└  Done
-```
-
-The link above contains both a video and a Mix (`list=RD…`), so tubepull downloads just the video. Mixes are
-generated per viewer and can't be listed; for links to regular playlists, `--playlist` downloads the whole list.
-The video and audio tracks download in parallel, ffmpeg then merges them without re-encoding, and the last line on
-stdout is the saved file's path, so scripts can capture it.
-
-</details>
-
-All flags, exit codes and environment variables: **[docs/CLI.md](https://github.com/FantoX/tubepull/blob/main/docs/CLI.md)**.
+All flags, trimming, JSON output and exit codes: **[CLI reference](https://github.com/FantoX/tubepull/blob/main/docs/CLI.md)**.
 
 ## Library
 
-```ts
-import { TubePull } from 'tubepull'; // or: const { TubePull } = require('tubepull');
+Create an instance with the defaults; no cookie file is needed for this example.
+
+```js
+import { TubePull } from 'tubepull';
 
 const yt = await TubePull.create();
-
 const info = await yt.getInfo('https://youtu.be/aqz-KE-bpKQ');
-console.log(
-  info.title,
-  info.qualities.map((q) => q.label),
-); // ['2160p60', '1440p60', '1080p60', ...]
+console.log(info.qualities.map((q) => q.label));
 
-yt.on('progress', (p) => console.log(p.stage, p.percent.toFixed(1)));
-
-await yt.download(info, { quality: '1080p', outputDir: './downloads' }); // merged mp4
-await yt.download(info, { type: 'audio', audioFormat: 'mp3', audioBitrate: '192k' });
-await yt.download(info, { videoItag: 137, audioItag: 140, range: { start: '1:00', end: '2:30' } });
-
-const stream = await yt.stream(info, { type: 'audio' }); // Readable, no ffmpeg
+await yt.download(info, { quality: '1080p', outputDir: './downloads' });
+await yt.download(info, { type: 'audio', audioFormat: 'mp3', outputDir: './downloads' });
 ```
 
-Every error is a `TubePullError` with a stable `code` and a `hint` that says what to try next:
+CommonJS: `const { TubePull } = require('tubepull')`. Errors expose a `code` and an actionable `hint`.
 
-```ts
-import { isTubePullError } from 'tubepull';
+To override the default session, supply your own Netscape `cookies.txt` file:
 
-try {
-  await yt.download(url);
-} catch (error) {
-  if (isTubePullError(error, 'RATE_LIMITED')) console.log(error.hint); // "Wait before retrying …"
-}
+```js
+import { TubePull } from 'tubepull';
+
+const yt = await TubePull.create({ cookies: './cookies.txt' });
+await yt.download('https://youtu.be/aqz-KE-bpKQ', { type: 'audio', audioFormat: 'mp3' });
 ```
 
-Options, events, types and errors: **[docs/API.md](https://github.com/FantoX/tubepull/blob/main/docs/API.md)** · Runnable examples: **[examples/](https://github.com/FantoX/tubepull/tree/main/examples)**
+Or set `YT_COOKIES` to a raw Cookie header (`name=value; name2=value2`) or a cookie-file path:
+
+```js
+import { TubePull } from 'tubepull';
+
+const yt = await TubePull.create({ cookies: process.env.YT_COOKIES });
+await yt.download('https://youtu.be/aqz-KE-bpKQ', { type: 'audio', audioFormat: 'mp3' });
+```
+
+Streaming, progress events and advanced options: **[API reference](https://github.com/FantoX/tubepull/blob/main/docs/API.md)** and
+**[Runnable examples](https://github.com/FantoX/tubepull/tree/main/examples)**.
 
 ## Quality and containers
 
@@ -225,23 +168,24 @@ efficient codec.
 
 ## How it stays reliable
 
-tubepull starts every run with a fresh visitor session issued by YouTube and asks the VISIONOS client first, whose
-streams need no Proof-of-Origin (PO) token. If YouTube refuses a client's streams partway through a download,
-tubepull gets the same stream from another client and carries on from the same byte.
+tubepull tries multiple playback clients, waits out required prerolls, and refreshes expired or refused stream
+URLs. Downloads resume from the last received byte when the replacement stream matches the original.
 
-It also behaves like a considerate client, which is what keeps it from tripping rate limits:
+- API requests share a limit of 2 in flight, at least 300 ms apart.
+- Valid extraction results are reused across inspection, downloads and retries.
+- Rate limits pause requests for the instance; session renewals are capped at once a minute.
 
-- No more than 2 requests to YouTube's API are in flight at once, spaced at least 300 ms apart (`requestPacing` to
-  adjust).
-- One extraction per video is reused across getInfo, download and retries while its URLs stay valid.
-- An HTTP 429 or `Retry-After` pauses every request of the instance, instead of retrying into the limit.
-- A rate-limit answer stops it from asking further clients, and fresh sessions are capped at one a minute.
+## Running on a server (VPS, Vercel)
 
-> [!IMPORTANT]
-> tubepull does not rotate IPs or disguise itself. If YouTube has blocked a network, which happens to many datacenter,
-> VPN and cloud IPs, waiting or another network is the answer. When nothing works, tubepull tells you what to try:
-> `--cookies cookies.txt` (exported from a signed-in browser), `--proxy http://…`, or
-> `--po-token <token> --visitor-data <data>`. Details: [docs/TROUBLESHOOTING.md](https://github.com/FantoX/tubepull/blob/main/docs/TROUBLESHOOTING.md).
+Use the same CLI or library calls on a VPS, and reuse one `TubePull` instance per process. The default session
+requires no manual cookie export or environment-variable setup.
+
+On serverless hosts, use a Node.js runtime and `stream()` to pipe audio without ffmpeg. Use `cacheDir: false`
+or a writable cache directory. Merged video downloads need ffmpeg and writable temporary storage.
+
+Sessions can expire and networks can be blocked. Run `tubepull doctor` if playback fails; custom cookies, proxies
+and signed-out mode are covered in the [API reference](https://github.com/FantoX/tubepull/blob/main/docs/API.md)
+and [Troubleshooting](https://github.com/FantoX/tubepull/blob/main/docs/TROUBLESHOOTING.md).
 
 ## Documentation
 

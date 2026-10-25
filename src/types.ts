@@ -1,28 +1,17 @@
 import type { Extractor } from './extractor/Extractor.js';
 
-//---- Section used for public media types ----
-
-/** What to download: merged video+audio, or audio only. */
 export type MediaType = 'video' | 'audio';
 
-/**
- * Quality selector.
- * - `'best'` / `'worst'`
- * - `'1080p'` — a resolution (nearest lower one when missing, unless `strict`)
- * - `'720p60'` — a resolution and frame rate
- */
+/** Use best/worst or resolution labels such as 1080p and 720p60; missing qualities fall back unless strict. */
 export type QualitySelector = 'best' | 'worst' | `${number}p` | `${number}p${number}`;
 
-/** Output container for video downloads. */
 export type Container = 'mp4' | 'webm' | 'mkv';
 
 /** Output format for audio downloads. `original` keeps the source file untouched (no ffmpeg). */
 export type AudioFormat = 'm4a' | 'opus' | 'mp3' | 'flac' | 'wav' | 'original';
 
-/** Normalised video codec family. */
 export type VideoCodec = 'avc1' | 'vp9' | 'av01' | 'other';
 
-/** Normalised audio codec family. */
 export type AudioCodec = 'mp4a' | 'opus' | 'ac-3' | 'ec-3' | 'other';
 
 export interface Thumbnail {
@@ -36,19 +25,17 @@ export interface Chapter {
   startSec: number;
 }
 
-/** An alternate audio language track (multi-language / dubbed videos). */
 export interface AudioTrack {
   id: string;
   name: string;
   isDefault: boolean;
 }
 
-/** One downloadable stream, normalised from YouTube's raw format list. */
 export interface MediaFormat {
   itag: number;
   /** Direct URL. Absent when the format is only reachable over SABR. */
   url?: string;
-  /** True when no direct URL is available (SABR-only). */
+
   sabr?: boolean;
   kind: 'video' | 'audio' | 'muxed';
   /** Source container. Audio-only mp4 is reported as `m4a`. */
@@ -75,7 +62,6 @@ export interface MediaFormat {
   lastModified?: string;
 }
 
-/** A human-friendly video quality, built from what is actually available for a video. */
 export interface QualityOption {
   /** e.g. `2160p60 HDR`, `1080p`, `720p60`. Usable as a `quality` selector (minus the HDR suffix). */
   label: string;
@@ -145,8 +131,6 @@ export interface PlaylistInfo {
   entries: PlaylistEntry[];
 }
 
-//---- Section used for download options ----
-
 export interface TimeRange {
   /** Seconds, or `HH:MM:SS(.ms)` / `MM:SS`. */
   start?: string | number;
@@ -162,10 +146,7 @@ export interface DownloadOptions {
   strict?: boolean;
   /** Prefer HDR streams when available. Default `false` (SDR preferred). */
   hdr?: boolean;
-  /**
-   * Default `'mp4'`. When the chosen codecs cannot be stream-copied into it, the
-   * output switches to `mkv` (or is transcoded when `allowTranscode` is set).
-   */
+  /** Default mp4; incompatible codecs switch to mkv unless transcoding is allowed. */
   container?: Container;
   /** Video codec preference, best first. Overrides the per-container default. */
   codecPreference?: VideoCodec[];
@@ -177,18 +158,15 @@ export interface DownloadOptions {
   audioBitrate?: string;
   /** Audio language track id or name (e.g. `'en'`, `'de.3'`). Default: the original track. */
   audioLanguage?: string;
-  /** Exact video itag. */
+
   videoItag?: number;
-  /** Exact audio itag. */
+
   audioItag?: number;
-  /** Cut the output to this time range. */
+
   range?: TimeRange;
   /** Default: current working directory. */
   outputDir?: string;
-  /**
-   * Filename template without extension. Default `'{title} [{id}]'`.
-   * Tokens: `{title} {id} {author} {channel} {height} {fps} {quality} {itag} {date} {container}`.
-   */
+  /** Filename template without extension. Default: {title} [{id}]. Available tokens are listed in docs/API.md. */
   filename?: string;
   /** Replace an existing output file. Default `false` (throws `FileExistsError`). */
   overwrite?: boolean;
@@ -237,8 +215,6 @@ export interface BatchItemResult {
   error?: Error;
 }
 
-//---- Section used for events ----
-
 export type Stage = 'info' | 'video' | 'audio' | 'thumbnail' | 'merge' | 'convert' | 'done';
 
 export interface ProgressEvent {
@@ -273,8 +249,6 @@ export type TubePullEvents = {
   retry: [RetryEvent];
 };
 
-//---- Section used for instance options ----
-
 export interface Logger {
   debug(message: string, ...args: unknown[]): void;
   info(message: string, ...args: unknown[]): void;
@@ -288,15 +262,12 @@ export interface PoTokenRequest {
   client: string;
 }
 
-/**
- * Supplies a Proof-of-Origin token. Return `undefined` to proceed without one.
- * tubepull does not generate PO tokens itself; plug in your own provider.
- */
+/** Return a caller-provided PO token, or undefined to proceed without one. */
 export type PoTokenProvider = (request: PoTokenRequest) => Promise<string | undefined> | string | undefined;
 
 export interface TubePullOptions {
-  /** Path to a Netscape `cookies.txt` file, or a raw `Cookie` header value. */
-  cookies?: string;
+  /** Overrides the bundled session with a cookies.txt path or raw header. `false` disables it. */
+  cookies?: string | false;
   /** HTTP(S) proxy URL, e.g. `http://user:pass@127.0.0.1:8080`. */
   proxy?: string;
   /** Explicit ffmpeg binary. Default: `TUBEPULL_FFMPEG_PATH`, then ffmpeg-static, then `PATH`. */
@@ -309,10 +280,7 @@ export interface TubePullOptions {
   poTokenProvider?: PoTokenProvider;
   /** InnerTube clients to try, in order (e.g. `VISIONOS`, `TV`, `IOS`). Default: `DEFAULT_CLIENTS`. */
   clients?: string[];
-  /**
-   * Pacing for requests to YouTube's API and player script (media downloads pace themselves). Default:
-   * 2 in flight, at least 300 ms apart. A 429 pauses every request of the instance for `Retry-After`.
-   */
+  /** API pacing: 2 concurrent requests, 300 ms apart by default. A 429 pauses the instance. */
   requestPacing?: { maxConcurrent?: number; minIntervalMs?: number };
   /** Interface language, e.g. `'en'`. */
   lang?: string;
@@ -325,9 +293,6 @@ export interface TubePullOptions {
   /** Custom fetch (takes precedence over `proxy`). */
   fetch?: typeof fetch;
   logger?: Logger;
-  /**
-   * Advanced: replace the extraction engine (default: youtubei.js). Must implement the `Extractor`
-   * interface; everything else (selection, download, ffmpeg) is shared.
-   */
+  /** Replace the default youtubei.js engine; selection and downloads still use normalized formats. */
   extractor?: Extractor;
 }

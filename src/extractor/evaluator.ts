@@ -1,7 +1,5 @@
 import vm from 'node:vm';
 
-//---- Section used for player-script evaluation ----
-
 /** The script youtubei.js extracts from YouTube's player (`BuildScriptResult`). */
 export interface PlayerScript {
   output: string;
@@ -12,11 +10,7 @@ export type EvalEnv = Record<string, string | number | boolean | null | undefine
 
 const EVAL_TIMEOUT_MS = 10_000;
 
-/**
- * This function is used for running the signature / `n` transform that youtubei.js extracts from the
- * player script. It executes in a fresh `node:vm` context with a timeout, so no external JS runtime
- * (Deno/Bun) is needed. The context has no `require`/`process`; the script only does string maths.
- */
+/** Use Node's VM with a deadline so no external JavaScript runtime is required. */
 export function evaluatePlayerScript(
   data: PlayerScript,
   env: EvalEnv,

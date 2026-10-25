@@ -40,7 +40,8 @@ The saved file path goes to stdout; everything else goes to stderr, so `path=$(t
 | `--list`, `--json`                     | Inspect only                                                                                                           |
 | `--playlist`                           | For links with both `v=` and `list=`, download the playlist instead of the single video                                |
 | `--concurrency <n>`                    | Parallel downloads for playlists or multiple links (default 2, max 16)                                                 |
-| `--cookies <file>`                     | Netscape `cookies.txt`, for age-restricted, private or members-only videos                                             |
+| `--cookies <file>`                     | Override the built-in session with your own Netscape `cookies.txt`                                                     |
+| `--anonymous`                          | Disable the built-in session and use signed-out playback (also available in `doctor`)                                  |
 | `--proxy <url>`                        | HTTP(S) proxy (default: `HTTPS_PROXY` / `HTTP_PROXY`)                                                                  |
 | `--po-token <t>`, `--visitor-data <d>` | Proof-of-Origin token and the visitor data it was minted for                                                           |
 | `--client <names>`                     | InnerTube clients to try, comma-separated (advanced)                                                                   |

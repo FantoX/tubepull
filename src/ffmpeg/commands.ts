@@ -1,8 +1,6 @@
 import type { AudioFormat, Chapter, Container } from '../types.js';
 import { toFfmpegTime, type ResolvedRange } from '../utils/time.js';
 
-//---- Section used for ffmpeg argument builders ----
-
 export interface MetadataTags {
   title?: string;
   artist?: string;
@@ -44,15 +42,11 @@ export interface AudioArgsInput {
   cover?: string;
 }
 
-/** Audio formats whose muxer can carry an attached cover picture. */
 export const COVER_AUDIO_FORMATS: ReadonlySet<ConvertFormat> = new Set(['m4a', 'mp3', 'flac']);
-/** Containers that carry chapters. */
+
 const CHAPTER_CONTAINERS: ReadonlySet<string> = new Set(['mp4', 'mkv', 'm4a']);
 
-/**
- * This function is used for input-side seek options. Input seeking is fast and, with stream copy,
- * keyframe-accurate-ish; with transcoding it is frame-accurate.
- */
+/** Input seeking is keyframe-aligned for copy and frame-accurate when transcoding. */
 function seekArgs(range: ResolvedRange | undefined): string[] {
   const args: string[] = [];
   if (range?.startSec !== undefined) args.push('-ss', toFfmpegTime(range.startSec));
@@ -68,10 +62,6 @@ function metadataArgs(metadata: MetadataTags | undefined): string[] {
   return args;
 }
 
-/**
- * This function is used for building the merge command (video + audio → container), stream-copying
- * unless transcoding was requested, with optional trim, metadata, chapters and cover.
- */
 export function buildMergeArgs(input: MergeArgsInput): string[] {
   const args: string[] = ['-y'];
   const seek = seekArgs(input.range);
@@ -163,7 +153,6 @@ const AUDIO_MUXER: Record<ConvertFormat, string> = {
   wav: 'wav',
 };
 
-/** Encoders each audio format needs when transcoding. */
 export const AUDIO_ENCODER: Record<ConvertFormat, string> = {
   m4a: 'aac',
   opus: 'libopus',
@@ -172,10 +161,6 @@ export const AUDIO_ENCODER: Record<ConvertFormat, string> = {
   wav: 'pcm_s16le',
 };
 
-/**
- * This function is used for building the audio extraction/conversion command (copy when the source
- * codec already matches, otherwise encode at the requested bitrate).
- */
 export function buildAudioArgs(input: AudioArgsInput): string[] {
   const args: string[] = ['-y'];
   let inputs = 0;
@@ -220,24 +205,15 @@ export function buildAudioArgs(input: AudioArgsInput): string[] {
   return args;
 }
 
-/**
- * This function is used for converting any downloaded thumbnail (jpg/webp/png) into a baseline JPEG
- * cover that every muxer accepts.
- */
+/** Normalize thumbnails to baseline JPEG for muxer compatibility. */
 export function buildCoverArgs(input: string, output: string): string[] {
   return ['-y', '-i', input, '-frames:v', '1', '-q:v', '2', '-update', '1', '-f', 'image2', output];
 }
 
-/**
- * This function is used for escaping a value for the ffmetadata format.
- */
 function escapeMeta(value: string): string {
   return value.replace(/([=;#\\\n])/g, '\\$1');
 }
 
-/**
- * This function is used for writing chapters (and title) as an ffmetadata document.
- */
 export function buildChaptersMetadata(chapters: Chapter[], durationSec: number, title?: string): string {
   const lines = [';FFMETADATA1'];
   if (title) lines.push(`title=${escapeMeta(title)}`);

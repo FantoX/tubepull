@@ -1,7 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
 
-/** What to do with one request. `undefined` serves it normally. */
+/** Return undefined to serve the request normally. */
 export type Fault =
   | undefined
   | { kind: 'status'; status: number; retryAfter?: string }
@@ -21,7 +21,7 @@ export interface RequestRecord {
 export interface MediaServerOptions {
   /** How the server reads ranges: googlevideo-style `range=` query, standard header, or ignore ranges. */
   rangeMode?: 'query' | 'header' | 'ignore';
-  /** Called for every request, in order; return a fault to inject. */
+  /** Return a fault to inject; calls follow request order. */
   fault?: (request: { path: string; index: number; perPath: number; start: number }) => Fault;
   /** Hide Content-Length on full responses (unknown size). */
   hideLength?: boolean;
@@ -34,10 +34,6 @@ export interface MediaServer {
   close(): Promise<void>;
 }
 
-/**
- * This function is used for a local HTTP server that serves byte ranges of in-memory files, with
- * deterministic fault injection for retry/resume tests.
- */
 export async function startMediaServer(
   files: Record<string, Buffer>,
   options: MediaServerOptions = {},
@@ -136,7 +132,6 @@ export async function startMediaServer(
   };
 }
 
-/** Deterministic pseudo-random bytes. */
 export function randomBuffer(size: number, seed = 1): Buffer {
   const out = Buffer.allocUnsafe(size);
   let x = seed >>> 0 || 1;

@@ -9,8 +9,6 @@ import { parseTarget } from '../utils/url.js';
 import { DEFAULT_FILENAME_TEMPLATE } from '../TubePull.js';
 import { plural } from './output.js';
 
-//---- Section used for the interactive wizard ----
-
 const LOSSY_BITRATES = ['128k', '192k', '256k', '320k'];
 
 function unwrap<T>(value: T): Exclude<T, symbol> {
@@ -21,9 +19,6 @@ function unwrap<T>(value: T): Exclude<T, symbol> {
   return value as Exclude<T, symbol>;
 }
 
-/**
- * This function is used for asking for the video or playlist link.
- */
 export async function askUrl(): Promise<string> {
   const url = unwrap(
     await p.text({
@@ -55,10 +50,6 @@ function containerHint(info: VideoInfo, base: DownloadOptions, container: Contai
       : 'VP9/AV1 + Opus';
 }
 
-/**
- * This function is used for the wizard steps after the info is known: type, quality, container or
- * audio format, destination, and extras.
- */
 export async function chooseDownloadOptions(
   info: VideoInfo,
   base: DownloadOptions,
@@ -209,9 +200,6 @@ export async function chooseDownloadOptions(
   return options;
 }
 
-/**
- * This function is used for asking shared settings once for a playlist or several links.
- */
 export async function chooseBatchOptions(count: number, base: DownloadOptions): Promise<DownloadOptions> {
   const options: DownloadOptions = { ...base };
   p.log.info(plural(count, 'video'));
@@ -263,9 +251,6 @@ export async function chooseBatchOptions(count: number, base: DownloadOptions): 
   return options;
 }
 
-/**
- * This function is used for offering to open the download folder in the system file manager.
- */
 export async function offerOpenFolder(folder: string): Promise<void> {
   const open = await p.confirm({ message: 'Open the folder?', initialValue: false });
   if (p.isCancel(open) || !open) return;

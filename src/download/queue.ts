@@ -1,13 +1,8 @@
 import { throwIfAborted } from '../errors.js';
 
-//---- Section used for bounded concurrency ----
-
 export type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
-/**
- * This function is used for running `worker` over `items` with at most `concurrency` in flight,
- * returning settled results in input order. One failure does not stop the others; an abort does.
- */
+/** Return results in input order; only an abort stops the remaining work. */
 export async function runQueue<I, T>(
   items: readonly I[],
   concurrency: number,

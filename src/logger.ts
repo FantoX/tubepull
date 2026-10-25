@@ -1,8 +1,6 @@
 import type { Logger } from './types.js';
 
-//---- Section used for library logging ----
-
-/** Logger that drops everything. The library never writes to the console on its own. */
+/** Keep the library silent unless a logger is supplied. */
 export const silentLogger: Logger = {
   debug() {},
   info() {},

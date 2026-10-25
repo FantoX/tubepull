@@ -23,17 +23,12 @@ import { createBarView, createLineView, type ProgressView } from './progress.js'
 import { infoToJson, renderFormatList, renderPlaylist, summaryLine } from './render.js';
 import { askUrl, chooseBatchOptions, chooseDownloadOptions, offerOpenFolder, prompts } from './wizard.js';
 
-//---- Section used for the main download command ----
-
 interface Targets {
   videoIds: string[];
   playlists: PlaylistInfo[];
 }
 
-/**
- * This function is used for routing Ctrl+C to an AbortController: the first press cancels cleanly
- * (temp files removed), a second press exits immediately.
- */
+/** First interrupt cancels cleanly; the second forces exit. */
 function installInterruptHandler(controller: AbortController): () => void {
   let presses = 0;
   const handler = () => {
@@ -106,10 +101,6 @@ function describeResult(result: DownloadResult): string {
   return `${pc.bold(result.path)} ${pc.dim(`(${formatBytes(result.sizeBytes)}${tracks.length ? `, ${tracks.join(' + ')}` : ''})`)}`;
 }
 
-/**
- * This function is used for the default command: inspect (`--list`/`--json`) or download one or more
- * videos/playlists, interactively or from flags.
- */
 export async function runDownloadCommand(urls: string[], raw: RawFlags): Promise<number> {
   const settings = parseFlags(raw);
   const interactive = isInteractiveTerminal() && !settings.json && !settings.list && !settings.yes;

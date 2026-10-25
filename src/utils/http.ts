@@ -1,12 +1,6 @@
-//---- Section used for HTTP helpers ----
-
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
-/**
- * This function is used for giving every request through `fetchFn` a deadline, so a hung InnerTube or
- * player-script request fails (and is retried) instead of blocking forever. The caller's own signal
- * still works; a timeout surfaces as a `TimeoutError`, not as a user abort.
- */
+/** Keep request timeouts distinct from the caller's abort signal. */
 export function withRequestTimeout(
   fetchFn: typeof fetch,
   timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
@@ -20,10 +14,7 @@ export function withRequestTimeout(
   return timed as typeof fetch;
 }
 
-/**
- * This function is used for reading when a googlevideo stream URL stops working (its `expire` parameter,
- * epoch seconds), or undefined when the URL does not say.
- */
+/** The expire query parameter is epoch seconds. */
 export function urlExpiresAt(url: string | undefined): number | undefined {
   if (!url) return undefined;
   try {
@@ -34,10 +25,7 @@ export function urlExpiresAt(url: string | undefined): number | undefined {
   }
 }
 
-/**
- * This function is used for spotting a stream URL whose `n` parameter was not transformed by the player
- * script. YouTube throttles such URLs to a crawl, so they are only worth using as a last resort.
- */
+/** An unchanged n parameter indicates a throttled URL. */
 export function isNThrottled(originalUrl: string | undefined, decipheredUrl: string): boolean {
   if (!originalUrl) return false;
   try {

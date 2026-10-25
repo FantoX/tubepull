@@ -74,6 +74,14 @@ describe('parseFlags', () => {
     expect(parseFlags({ client: 'ios, mweb' }, {}).instance.clients).toEqual(['ios', 'mweb']);
   });
 
+  it('supports a user cookie override and explicitly anonymous playback', () => {
+    expect(parseFlags({ cookies: 'my-cookies.txt' }, {}).instance.cookies).toBe('my-cookies.txt');
+    const anonymous = parseFlags({ anonymous: true }, {});
+    expect(anonymous.instance.cookies).toBe(false);
+    expect(anonymous.selectionGiven).toBe(false);
+    expect(parseFlags({}, {}).instance.cookies).toBeUndefined();
+  });
+
   it.each([
     [{ quality: '1080x' }, /Invalid quality/],
     [{ format: 'aiff' }, /--format must be one of/],
@@ -84,6 +92,7 @@ describe('parseFlags', () => {
     [{ start: '2:00', end: '1:00' }, /must be after/],
     [{ concurrency: 0 }, /between 1 and 16/],
     [{ poToken: 'abc' }, /--visitor-data/],
+    [{ anonymous: true, cookies: 'my-cookies.txt' }, /either --cookies or --anonymous/],
   ])('rejects %o', (raw, message) => {
     expect(() => parseFlags(raw, {})).toThrowError(message);
   });

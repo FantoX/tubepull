@@ -3,27 +3,36 @@ import { createRequire } from 'node:module';
 import type Innertube from 'youtubei.js';
 import type * as YoutubeiNamespace from 'youtubei.js';
 import { backoffDelay, sleep } from '../download/retry.js';
-import { ExtractorError, NetworkError, throwIfAborted, type TubePullError } from '../errors.js';
+import {
+  BotCheckError,
+  ExtractorError,
+  NetworkError,
+  throwIfAborted,
+  type TubePullError,
+} from '../errors.js';
 import type { Chapter, Logger, MediaFormat, PlaylistEntry, PlaylistInfo, Thumbnail } from '../types.js';
 import { chaptersFromDescription } from '../utils/chapters.js';
 import { RequestGovernor, governedFetch } from '../utils/governor.js';
 import { isNThrottled, withRequestTimeout } from '../utils/http.js';
 import { watchUrl } from '../utils/url.js';
+import { cookieValue } from '../utils/cookies.js';
 import { evaluatePlayerScript, type PlayerScript } from './evaluator.js';
 import type { ExtractedVideo, Extractor, GetVideoOptions } from './Extractor.js';
 import { dedupeFormats, normalizeFormat, type RawFormat } from './normalize.js';
 import { mapPlayability, mapThrown, mostRelevantError } from './playability.js';
+import {
+  DIRECT_CLIENTS,
+  fetchEmbedContext,
+  playabilityReason,
+  prerollWaitMs,
+  requestPlayer,
+  type DirectClient,
+} from './player.js';
 import type { PoTokenSource } from './poToken.js';
-
-//---- Section used for the youtubei.js extractor ----
 
 type YoutubeiModule = typeof YoutubeiNamespace;
 
-/**
- * Clients tried in order until one returns formats with direct URLs. VISIONOS needs no PO token for its
- * streams; IOS, MWEB and ANDROID_VR return URLs that YouTube refuses (HTTP 403) without one, so they are
- * only fallbacks. A client whose streams are refused mid-download is skipped on re-extraction.
- */
+/** Prefer clients with direct streams; refused clients move to the back on re-extraction. */
 export const DEFAULT_CLIENTS = ['VISIONOS', 'TV', 'WEB_EMBEDDED', 'IOS', 'MWEB', 'WEB'];
 
 const MAX_PLAYLIST_PAGES = 200;
@@ -44,11 +53,10 @@ export interface YoutubeiExtractorOptions {
   requestTimeoutMs?: number;
   /** Shared pacing for InnerTube and player requests. Default: 2 in flight, 300 ms apart. */
   governor?: RequestGovernor;
-  /** Builds an InnerTube session; `generateLocally` invents visitor data instead of asking YouTube. Tests replace it. */
+  /** Tests can replace session creation without contacting YouTube. */
   createSession?: (generateLocally: boolean) => Promise<Innertube>;
 }
 
-/** One pass over the clients: the first fully usable extraction, else the best fallback and the refusals. */
 interface ClientPass {
   session: Innertube;
   best?: ExtractedVideo;
@@ -57,15 +65,12 @@ interface ClientPass {
 }
 
 const INFO_RETRY_BACKOFF = { baseMs: 500, maxMs: 2_000 };
-/** At most one fresh session per minute: renewing in a loop looks exactly like abuse. */
+/** Cap session renewals at one per minute. */
 const SESSION_RENEW_COOLDOWN_MS = 60_000;
 
 let modulePromise: Promise<YoutubeiModule> | undefined;
 
-/**
- * This function is used for loading youtubei.js once (lazily, so CLI start-up and `--help` stay fast)
- * and installing the node:vm player-script evaluator and quiet logging.
- */
+/** Load lazily to keep CLI help and startup fast. */
 async function loadYoutubei(): Promise<YoutubeiModule> {
   modulePromise ??= import('youtubei.js').then((mod) => {
     mod.Platform.shim.eval = (data, env) => evaluatePlayerScript(data as PlayerScript, env);
@@ -80,14 +85,22 @@ async function loadYoutubei(): Promise<YoutubeiModule> {
   }
 }
 
-/**
- * This function is used for a client playback nonce, sent with media requests like the web player does.
- */
+/** Match the browser's playback nonce format. */
 function createCpn(): string {
   const bytes = randomBytes(16);
   let cpn = '';
   for (const byte of bytes) cpn += CPN_ALPHABET[byte & 63];
   return cpn;
+}
+
+type VideoBasicInfo = Awaited<ReturnType<Innertube['getBasicInfo']>>['basic_info'];
+
+function withoutEmpty(value: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([, v]) => v !== undefined && v !== null && v !== '' && !(typeof v === 'number' && Number.isNaN(v)),
+    ),
+  );
 }
 
 function text(value: unknown): string {
@@ -106,41 +119,32 @@ export class YoutubeiExtractor implements Extractor {
   #lastRenewal = Number.NEGATIVE_INFINITY;
   readonly #governor: RequestGovernor;
 
+  readonly #fetch: typeof fetch;
+  /** Direct-client streams remain blocked until preroll ends. */
+  readonly #playableAt = new WeakMap<object, number>();
+
   constructor(options: YoutubeiExtractorOptions) {
     this.#options = options;
     this.#clients = options.clients?.length ? options.clients.map((c) => c.toUpperCase()) : DEFAULT_CLIENTS;
     this.#governor = options.governor ?? new RequestGovernor();
+    this.#fetch = governedFetch(
+      withRequestTimeout(options.fetch ?? globalThis.fetch, options.requestTimeoutMs),
+      this.#governor,
+    );
   }
 
-  /**
-   * This function is used for creating the InnerTube session once and sharing it between calls.
-   */
   async #innertube(): Promise<Innertube> {
     this.#session ??= (async () => {
       const mod = await loadYoutubei();
-      const {
-        cookie,
-        fetch: fetchFn,
-        visitorData,
-        poTokens,
-        lang,
-        location,
-        cacheDir,
-        logger,
-        requestTimeoutMs,
-      } = this.#options;
-      // Every InnerTube/player request is paced by the shared governor; the deadline applies per attempt.
-      const timedFetch = governedFetch(
-        withRequestTimeout(fetchFn ?? globalThis.fetch, requestTimeoutMs),
-        this.#governor,
-      );
+      const { cookie, visitorData, poTokens, lang, location, cacheDir, logger } = this.#options;
+      const timedFetch = this.#fetch;
       const create =
         this.#options.createSession ??
         ((generateLocally: boolean) =>
           mod.Innertube.create({
             cache: cacheDir ? new mod.UniversalCache(true, cacheDir) : undefined,
-            // Cache the player script only. A cached session outlives its welcome: YouTube bot-checks
-            // stale or locally generated visitor data, and a fresh one costs a single request.
+            // Cache the player script, not session data: stale visitor data triggers bot checks.
+
             enable_session_cache: false,
             generate_session_locally: generateLocally,
             retrieve_player: true,
@@ -152,8 +156,8 @@ export class YoutubeiExtractor implements Extractor {
             ...(location ? { location } : {}),
           }));
       try {
-        // A visitor session issued by YouTube: locally invented visitor data gets bot-checked
-        // (LOGIN_REQUIRED) by most clients.
+        // Prefer visitor data issued by YouTube over locally generated data.
+
         return (this.#current = await create(false));
       } catch (remoteError) {
         logger.debug(`remote session failed, using a local one: ${(remoteError as Error).message}`);
@@ -191,18 +195,13 @@ export class YoutubeiExtractor implements Extractor {
     };
   }
 
-  /**
-   * This function is used for resolving a video through each configured client until one returns
-   * downloadable formats, mapping refusals to typed errors.
-   */
   async getVideo(videoId: string, options: GetVideoOptions = {}): Promise<ExtractedVideo> {
     const first = await this.#tryClients(videoId, options);
     if (first.best) return first.best;
     let { fallback, errors } = first;
 
-    // Bot checks and dropped connections are usually tied to the session's visitor data, not the video:
-    // one more pass with a fresh session often succeeds (long batch runs get their visitor flagged).
-    // Never for rate limits: those are per network, and more requests only extend them.
+    // Renew visitor data after session failures, never after rate limits.
+
     const sessionIssue = errors.some((e) => e.code === 'BOT_CHECK' || e.code === 'NETWORK');
     const rateLimited = errors.some((e) => e.code === 'RATE_LIMITED');
     if (!fallback && sessionIssue && !rateLimited && this.#renewSession(first.session)) {
@@ -214,14 +213,20 @@ export class YoutubeiExtractor implements Extractor {
 
     // Metadata is still useful (--list/--json); selection explains why nothing is downloadable.
     if (fallback) return fallback;
-    throw mostRelevantError(errors);
+    const error = mostRelevantError(errors);
+    // A bot check despite cookies can mean the exported session expired.
+    if (error.code === 'BOT_CHECK' && this.#options.cookie) {
+      throw new BotCheckError(`${error.message} (the cookies were treated as signed out)`, {
+        ...(error.details ? { details: error.details } : {}),
+        hint:
+          'The cookies have expired or YouTube rotated them. Export fresh ones from a private (incognito) ' +
+          'window: sign in, export cookies.txt, then close the window so the browser never rotates them.',
+      });
+    }
+    throw error;
   }
 
-  /**
-   * This function is used for dropping the session so the next call starts a fresh one. Returns false
-   * (no retry) when a renewal happened within the last minute; when a concurrent call already replaced
-   * the session, the retry simply uses that one.
-   */
+  /** Reuse concurrent renewals; allow at most one fresh session per minute. */
   #renewSession(stale: Innertube): boolean {
     if (this.#current !== stale) return true;
     const now = Date.now();
@@ -232,10 +237,7 @@ export class YoutubeiExtractor implements Extractor {
     return true;
   }
 
-  /**
-   * This function is used for one pass over the clients. Throttled responses (unsolved `n`) and SABR-only
-   * responses are kept as fallbacks while later clients get a chance to do better.
-   */
+  /** Keep throttled and SABR-only results while trying clients with direct streams. */
   async #tryClients(videoId: string, options: GetVideoOptions): Promise<ClientPass> {
     const { signal, excludeClients = [] } = options;
     const yt = await this.#innertube();
@@ -315,10 +317,7 @@ export class YoutubeiExtractor implements Extractor {
     return fallback ? { session: yt, fallback, errors } : { session: yt, errors };
   }
 
-  /**
-   * This function is used for the player request of one client, retried once after a transient
-   * network failure so a single dropped request does not skip the client.
-   */
+  /** Retry transient network failures once before moving to another client. */
   async #basicInfo(
     yt: Innertube,
     videoId: string,
@@ -326,8 +325,10 @@ export class YoutubeiExtractor implements Extractor {
     poToken: string | undefined,
     signal: AbortSignal | undefined,
   ): Promise<Awaited<ReturnType<Innertube['getBasicInfo']>>> {
+    const direct = DIRECT_CLIENTS[client];
     for (let attempt = 1; ; attempt++) {
       try {
+        if (direct) return await this.#directInfo(yt, direct, videoId, poToken, signal);
         return await yt.getBasicInfo(videoId, {
           client: client as never,
           ...(poToken ? { po_token: poToken } : {}),
@@ -341,6 +342,76 @@ export class YoutubeiExtractor implements Extractor {
     }
   }
 
+  /** Wrap direct-player responses in VideoInfo to reuse parsing and deciphering. */
+  async #directInfo(
+    yt: Innertube,
+    client: DirectClient,
+    videoId: string,
+    poToken: string | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<Awaited<ReturnType<Innertube['getBasicInfo']>>> {
+    const mod = await loadYoutubei();
+    const { cookie, lang, location } = this.#options;
+    const embed = client.embedded ? await fetchEmbedContext(this.#fetch, videoId, signal) : undefined;
+    const visitorData = embed?.visitorData ?? yt.session.context.client.visitorData;
+    const sapisid = cookie ? cookieValue(cookie, 'SAPISID') : undefined;
+    const response = await requestPlayer({
+      fetch: this.#fetch,
+      client,
+      videoId,
+      ...(visitorData ? { visitorData } : {}),
+      ...(yt.session.player?.signature_timestamp
+        ? { signatureTimestamp: yt.session.player.signature_timestamp }
+        : {}),
+      ...(poToken ? { poToken } : {}),
+      ...(embed ? { embed } : {}),
+      ...(cookie
+        ? {
+            auth: { cookie, ...(sapisid ? { authorization: await mod.Utils.generateSidAuth(sapisid) } : {}) },
+          }
+        : {}),
+      ...(lang ? { lang } : {}),
+      ...(location ? { location } : {}),
+      ...(signal ? { signal } : {}),
+    });
+    const answeredAt = Date.now();
+    const status = response.playabilityStatus as { status?: string } | undefined;
+    if (status?.status !== 'OK') {
+      const reason = playabilityReason(status);
+      throw (
+        mapPlayability(status?.status ?? 'ERROR', reason) ??
+        new ExtractorError(`${client.name} returned no playability status`)
+      );
+    }
+    const info = new mod.YT.VideoInfo(
+      [{ success: true, status_code: 200, data: response } as never],
+      yt.actions,
+      createCpn(),
+    );
+    const prerollMs = prerollWaitMs(response);
+    if (prerollMs > 0) {
+      this.#playableAt.set(info, answeredAt + prerollMs);
+      this.#options.logger.debug(
+        `client ${client.name}: streams served after a ${(prerollMs / 1000).toFixed(1)}s enforced preroll`,
+      );
+    }
+    return info;
+  }
+
+  /** TV omits metadata; fill it from WEB when available. */
+  async #withWebMetadata(yt: Innertube, basic: VideoBasicInfo, client: string): Promise<VideoBasicInfo> {
+    if (basic.title || !DIRECT_CLIENTS[client] || !basic.id) return basic;
+    try {
+      const web = await yt.getBasicInfo(basic.id, { client: 'WEB' });
+      if (!web.basic_info.title) return basic;
+      this.#options.logger.debug(`client ${client}: metadata from the WEB player`);
+      return { ...withoutEmpty(basic), ...withoutEmpty(web.basic_info) } as VideoBasicInfo;
+    } catch (error) {
+      this.#options.logger.debug(`client ${client}: WEB metadata unavailable: ${(error as Error).message}`);
+      return basic;
+    }
+  }
+
   async #toExtracted(
     info: Awaited<ReturnType<Innertube['getBasicInfo']>>,
     client: string,
@@ -348,7 +419,7 @@ export class YoutubeiExtractor implements Extractor {
   ): Promise<{ video: ExtractedVideo; throttled: boolean }> {
     const yt = await this.#innertube();
     const mod = await loadYoutubei();
-    const basic = info.basic_info;
+    const basic = await this.#withWebMetadata(yt, info.basic_info, client);
     const streaming = info.streaming_data;
     const sabrAvailable = Boolean(streaming?.server_abr_streaming_url);
     const rawFormats = [...(streaming?.formats ?? []), ...(streaming?.adaptive_formats ?? [])];
@@ -412,19 +483,18 @@ export class YoutubeiExtractor implements Extractor {
         formats: dedupeFormats(formats),
         client,
       },
-      // youtubei.js's stream headers, plus the User-Agent of the client that signed the URLs.
+
       media: { headers: mediaHeaders(mod, client), rangeMode: 'query' },
     };
     const channelId = basic.channel_id ?? basic.channel?.id;
     if (channelId) result.info.channelId = channelId;
-    if (basic.view_count !== undefined) result.info.viewCount = basic.view_count;
+    if (Number.isFinite(basic.view_count)) result.info.viewCount = basic.view_count as number;
     if (uploadDate) result.info.uploadDate = uploadDate;
+    const playableAt = this.#playableAt.get(info);
+    if (playableAt) result.media.playableAt = playableAt;
     return { video: result, throttled: throttledUrls > 0 };
   }
 
-  /**
-   * This function is used for listing every video in a playlist, following continuations.
-   */
   async getPlaylist(playlistId: string, signal?: AbortSignal): Promise<PlaylistInfo> {
     const yt = await this.#innertube();
     let page: Awaited<ReturnType<Innertube['getPlaylist']>>;
@@ -471,20 +541,14 @@ export class YoutubeiExtractor implements Extractor {
   }
 }
 
-/**
- * This function is used for the headers of media requests: streams are fetched as the client that
- * signed them.
- */
+/** Fetch media with the User-Agent of the client that signed its URL. */
 function mediaHeaders(mod: YoutubeiModule, client: string): Record<string, string> {
   const clients = mod.Constants.CLIENTS as unknown as Record<string, { USER_AGENT?: string } | undefined>;
-  const userAgent = clients[client]?.USER_AGENT;
+  const userAgent = DIRECT_CLIENTS[client]?.userAgent ?? clients[client]?.USER_AGENT;
   return { ...mod.Constants.STREAM_HEADERS, ...(userAgent ? { 'user-agent': userAgent } : {}) };
 }
 
-/**
- * This function is used for reading a video ID and title from the several playlist item node types
- * YouTube currently serves (classic rows, lockups, shorts).
- */
+/** Accept classic, lockup, and Shorts playlist rows. */
 export function toPlaylistEntry(item: unknown): PlaylistEntry | undefined {
   const node = item as Record<string, unknown> & { type?: string };
   switch (node.type) {

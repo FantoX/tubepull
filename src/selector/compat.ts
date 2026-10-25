@@ -1,11 +1,5 @@
 import type { AudioCodec, AudioFormat, Container, MediaFormat, VideoCodec } from '../types.js';
 
-//---- Section used for codec ↔ container compatibility ----
-
-/**
- * This function is used for reducing a codec string (`avc1.640028`, `vp09.00.51.08`, `av01.0.08M.08`)
- * to its family.
- */
 export function videoCodecFamily(codec: string | undefined): VideoCodec {
   const c = (codec ?? '').toLowerCase();
   if (c.startsWith('avc1') || c.startsWith('avc3') || c === 'h264') return 'avc1';
@@ -14,9 +8,6 @@ export function videoCodecFamily(codec: string | undefined): VideoCodec {
   return 'other';
 }
 
-/**
- * This function is used for reducing an audio codec string (`mp4a.40.2`, `opus`) to its family.
- */
 export function audioCodecFamily(codec: string | undefined): AudioCodec {
   const c = (codec ?? '').toLowerCase();
   if (c.startsWith('mp4a') || c === 'aac') return 'mp4a';
@@ -42,30 +33,18 @@ export const DEFAULT_CODEC_PREFERENCE: Record<Container, readonly VideoCodec[]> 
   mkv: ['vp9', 'av01', 'avc1'],
 };
 
-/**
- * This function is used for deciding whether a video codec can be copied into a container.
- */
 export function isVideoCopyCompatible(container: Container, codec: VideoCodec): boolean {
   return COPY_MATRIX[container].video.includes(codec);
 }
 
-/**
- * This function is used for deciding whether an audio codec can be copied into a container.
- */
 export function isAudioCopyCompatible(container: Container, codec: AudioCodec): boolean {
   return COPY_MATRIX[container].audio.includes(codec);
 }
 
-/**
- * This function is used for the video codec family of a format.
- */
 export function formatVideoCodec(format: MediaFormat): VideoCodec {
   return videoCodecFamily(format.vcodec);
 }
 
-/**
- * This function is used for the audio codec family of a format.
- */
 export function formatAudioCodec(format: MediaFormat): AudioCodec {
   return audioCodecFamily(format.acodec);
 }

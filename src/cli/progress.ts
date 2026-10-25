@@ -4,8 +4,6 @@ import type { ProgressEvent, Stage } from '../types.js';
 import { formatBytes, formatSpeed } from '../utils/bytes.js';
 import { formatDuration } from '../utils/time.js';
 
-//---- Section used for CLI progress display ----
-
 const STAGE_LABEL: Partial<Record<Stage, string>> = {
   video: 'video',
   audio: 'audio',
@@ -19,7 +17,7 @@ const TITLE_WIDTH = 28;
 export interface ProgressView {
   /** `title` prefixes the line when several videos download at once. */
   update(event: ProgressEvent, title?: string): void;
-  /** Remove a finished video's bars. */
+
   finish(videoId: string): void;
   /** Print a message without corrupting the bars. */
   log(message: string): void;
@@ -48,9 +46,6 @@ function stageLabel(stage: Stage, title?: string): string {
   return title ? `${pc.dim(shorten(title))} ${name}` : name;
 }
 
-/**
- * This function is used for live progress bars on a TTY: one bar per video and stage.
- */
 export function createBarView(): ProgressView {
   const multibar = new cliProgress.MultiBar(
     {
@@ -101,10 +96,7 @@ export function createBarView(): ProgressView {
   };
 }
 
-/**
- * This function is used for plain progress lines (CI, pipes): one line per stage every few seconds and
- * when a stage completes.
- */
+/** Throttle non-interactive output; always print stage completion. */
 export function createLineView(): ProgressView {
   const last = new Map<string, number>();
   const done = new Set<string>();

@@ -1,14 +1,9 @@
 import type { Chapter } from '../types.js';
 
-//---- Section used for chapter detection ----
-
-// "0:00 Intro", "00:00 - Intro", "1:02:03 Part", "(0:00) Intro", "Intro 0:00" is not supported by YouTube either.
+// Only leading timestamps count as chapter markers.
 const LINE = /^\s*[[(]?((?:\d{1,2}:)?\d{1,2}:\d{2})[\])]?\s*(?:[-–—:|•.]\s*)?(.+?)\s*$/;
 
-/**
- * This function is used for reading chapters from a video description using YouTube's own rules:
- * at least three timestamps, the first at 0:00, ascending order.
- */
+/** YouTube chapters require three ascending timestamps, starting at 0:00. */
 export function chaptersFromDescription(description: string, durationSec = 0): Chapter[] {
   const chapters: Chapter[] = [];
   for (const line of description.split(/\r?\n/)) {

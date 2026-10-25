@@ -10,21 +10,25 @@ const yt = await TubePull.create(options);
 Creates an instance. It loads the cookies file and validates the proxy up front, so a bad path fails here
 instead of on the first download. Every option is optional.
 
-| Option                    | Type                                         | Description                                                                                                                 |
-| ------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `cookies`                 | `string`                                     | Path to a Netscape `cookies.txt`, or a raw `Cookie` header value. Only `youtube.com` cookies that haven't expired are sent. |
-| `proxy`                   | `string`                                     | `http://` or `https://` proxy URL. Uses the optional `undici` dependency.                                                   |
-| `ffmpegPath`              | `string`                                     | Explicit ffmpeg binary. Otherwise tubepull tries `TUBEPULL_FFMPEG_PATH`, then ffmpeg-static, then `PATH`.                   |
-| `poToken` / `visitorData` | `string`                                     | A static Proof-of-Origin token and the visitor data it was minted for.                                                      |
-| `poTokenProvider`         | `(req) => string \| undefined \| Promise<…>` | Called for each video (`{ videoId, client, visitorData }`). Takes precedence over `poToken`.                                |
-| `requestPacing`           | `{ maxConcurrent?, minIntervalMs? }`         | Pacing of YouTube API requests for the instance. Default 2 in flight, 300 ms apart. A 429 pauses all of them.               |
-| `clients`                 | `string[]`                                   | InnerTube clients to try, in order. Default `DEFAULT_CLIENTS`: VISIONOS, TV, WEB_EMBEDDED, IOS, MWEB, WEB.                  |
-| `lang` / `location`       | `string`                                     | Interface language (`'en'`) and region (`'US'`).                                                                            |
-| `cacheDir`                | `string \| false`                            | Player-script cache. Default: the per-OS cache directory. `false` disables it.                                              |
-| `tempDir`                 | `string`                                     | Where temporary download files go. Default: the OS temp directory.                                                          |
-| `fetch`                   | `typeof fetch`                               | Custom fetch. Takes precedence over `proxy`.                                                                                |
-| `logger`                  | `Logger`                                     | `{ debug, info, warn, error }`. The library never writes to the console itself.                                             |
-| `extractor`               | `Extractor`                                  | Advanced: replaces the extraction engine (see below).                                                                       |
+When `cookies` is omitted, a bundled playback session is selected once for the instance. Supply your own
+cookies to override it, or set `cookies: false` for signed-out playback. The bundled payload is obfuscated
+with AES-256-GCM, but its key is included in the package: it is recoverable and can expire or be revoked.
+
+| Option                    | Type                                         | Description                                                                                                                                                                 |
+| ------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cookies`                 | `string \| false`                            | Override the bundled session with a Netscape `cookies.txt` path or raw header. `false` disables authentication. Expired and foreign-domain cookies are filtered from files. |
+| `proxy`                   | `string`                                     | `http://` or `https://` proxy URL. Uses the optional `undici` dependency.                                                                                                   |
+| `ffmpegPath`              | `string`                                     | Explicit ffmpeg binary. Otherwise tubepull tries `TUBEPULL_FFMPEG_PATH`, then ffmpeg-static, then `PATH`.                                                                   |
+| `poToken` / `visitorData` | `string`                                     | A static Proof-of-Origin token and the visitor data it was minted for.                                                                                                      |
+| `poTokenProvider`         | `(req) => string \| undefined \| Promise<…>` | Called for each video (`{ videoId, client, visitorData }`). Takes precedence over `poToken`.                                                                                |
+| `requestPacing`           | `{ maxConcurrent?, minIntervalMs? }`         | Pacing of YouTube API requests for the instance. Default 2 in flight, 300 ms apart. A 429 pauses all of them.                                                               |
+| `clients`                 | `string[]`                                   | InnerTube clients to try, in order. Default `DEFAULT_CLIENTS`: VISIONOS, TV, WEB_EMBEDDED, IOS, MWEB, WEB.                                                                  |
+| `lang` / `location`       | `string`                                     | Interface language (`'en'`) and region (`'US'`).                                                                                                                            |
+| `cacheDir`                | `string \| false`                            | Player-script cache. Default: the per-OS cache directory. `false` disables it.                                                                                              |
+| `tempDir`                 | `string`                                     | Where temporary download files go. Default: the OS temp directory.                                                                                                          |
+| `fetch`                   | `typeof fetch`                               | Custom fetch. Takes precedence over `proxy`.                                                                                                                                |
+| `logger`                  | `Logger`                                     | `{ debug, info, warn, error }`. The library never writes to the console itself.                                                                                             |
+| `extractor`               | `Extractor`                                  | Advanced: replaces the extraction engine (see below).                                                                                                                       |
 
 ## Methods
 

@@ -3,8 +3,6 @@ import { isNetworkFailure } from '../extractor/playability.js';
 import type { RangeMode } from '../extractor/Extractor.js';
 import { backoffDelay, DEFAULT_BACKOFF, parseRetryAfter, sleep, type BackoffOptions } from './retry.js';
 
-//---- Section used for chunked ranged HTTP ----
-
 export const DEFAULT_CHUNK_SIZE = 10 * 1024 * 1024;
 export const DEFAULT_RETRIES = 5;
 const DEFAULT_MAX_REFRESHES = 3;
@@ -15,11 +13,12 @@ export interface MediaSource {
   headers: Record<string, string>;
   rangeMode: RangeMode;
   contentLength?: number;
-  /**
-   * Re-extract after 403/410/404 (expired or refused URL). May return new headers too, when the fresh
-   * URL comes from a different client.
-   */
-  refresh?: () => Promise<string | { url: string; headers?: Record<string, string> }>;
+  /** Epoch ms before which the host refuses the URL (enforced preroll); requests wait until then. */
+  playableAt?: number;
+  /** Refresh refused URLs, headers, and preroll timing after 403/410/404. */
+  refresh?: () => Promise<
+    string | { url: string; headers?: Record<string, string>; playableAt?: number | undefined }
+  >;
 }
 
 export interface RetryInfo {
@@ -67,10 +66,7 @@ class EmptyChunkError extends Error {
   }
 }
 
-/**
- * This function is used for building the request for one byte range: googlevideo-style `range=` query
- * parameter, or a standard `Range` header.
- */
+/** Some clients require a range query instead of a Range header. */
 export function buildRangeRequest(
   source: Pick<MediaSource, 'headers' | 'rangeMode'>,
   url: string,
@@ -85,19 +81,12 @@ export function buildRangeRequest(
   return { url, headers: { ...source.headers, Range: `bytes=${start}-${end}` } };
 }
 
-/**
- * This function is used for reading the total size from a `Content-Range: bytes a-b/total` header.
- */
 export function parseContentRangeTotal(value: string | null): number | undefined {
   const match = /\/(\d+)\s*$/.exec(value ?? '');
   return match ? Number(match[1]) : undefined;
 }
 
-/**
- * This function is used for streaming a media file as ~10 MiB ranged requests. Each chunk is retried
- * with backoff on network errors, stalls and 5xx/429; a 403/410 refreshes the URL. Bytes are yielded
- * exactly once and in order, so callers can append them to a file or pipe them on.
- */
+/** Yield bytes once, in order, even after retries or URL refreshes. */
 export async function* fetchMediaChunks(
   options: ChunkStreamOptions,
 ): AsyncGenerator<Uint8Array, void, undefined> {
@@ -124,9 +113,13 @@ export async function* fetchMediaChunks(
   };
   let attempt = 0;
   let refreshes = 0;
+  let playableAt = source.playableAt;
 
   while (total === undefined || offset < total) {
     if (signal?.aborted) throw toAbortError(signal);
+    // Asking earlier only earns a 403, and the refresh that follows starts a new preroll.
+    const untilPlayable = (playableAt ?? 0) - Date.now();
+    if (untilPlayable > 0) await sleep(untilPlayable, signal);
     const end = total === undefined ? offset + chunkSize - 1 : Math.min(offset + chunkSize, total) - 1;
     const requestController = new AbortController();
     const requestSignal = signal
@@ -142,7 +135,7 @@ export async function* fetchMediaChunks(
     let receivedThisChunk = 0;
     const chunkStart = offset;
 
-    // The outer try/finally also runs when the consumer stops iterating early (generator return()).
+    // Run cleanup even when the consumer stops iterating early.
     try {
       try {
         const range = buildRangeRequest(request, url, offset, end);
@@ -204,7 +197,6 @@ export async function* fetchMediaChunks(
         if (receivedThisChunk === 0) throw new EmptyChunkError();
         // Unknown size and a short chunk: that was the end of the file.
         if (total === undefined && receivedThisChunk < end - chunkStart + 1) return;
-        // Otherwise loop: a short chunk simply continues from the new offset.
       } catch (error) {
         clearTimeout(stallTimer);
         reader?.cancel().catch(() => {});
@@ -236,6 +228,7 @@ export async function* fetchMediaChunks(
             else {
               url = fresh.url;
               if (fresh.headers) request = { ...request, headers: fresh.headers };
+              playableAt = fresh.playableAt;
             }
             continue;
           }

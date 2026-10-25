@@ -1,14 +1,9 @@
 import type { AudioQualityOption, MediaFormat, QualityOption, VideoCodec } from '../types.js';
 import { formatAudioCodec, formatVideoCodec } from './compat.js';
 
-//---- Section used for quality grouping ----
-
 const CODEC_RANK: Record<VideoCodec, number> = { av01: 0, vp9: 1, avc1: 2, other: 3 };
 
-/**
- * This function is used for the "p" value of a video format. YouTube labels portrait videos by
- * their shorter side (a 1080×1920 short is "1080p"), so the label wins over raw height.
- */
+/** Portrait quality labels use the shorter side, not raw height. */
 export function qualityHeight(format: MediaFormat): number {
   const fromLabel = format.qualityLabel ? Number.parseInt(format.qualityLabel, 10) : Number.NaN;
   if (Number.isFinite(fromLabel) && fromLabel > 0) return fromLabel;
@@ -16,24 +11,16 @@ export function qualityHeight(format: MediaFormat): number {
   return format.height ?? 0;
 }
 
-/**
- * This function is used for the frame rate used in labels/grouping: anything ≤ 30 fps is "standard".
- */
+/** Group frame rates up to 30 fps as standard. */
 export function fpsBucket(fps: number | undefined): number {
   const value = Math.round(fps ?? 30);
   return value > 30 ? value : 30;
 }
 
-/**
- * This function is used for the human label of a quality, e.g. `1080p60 HDR`.
- */
 export function qualityLabel(height: number, fps: number, hdr: boolean): string {
   return `${height}p${fps > 30 ? fps : ''}${hdr ? ' HDR' : ''}`;
 }
 
-/**
- * This function is used for estimating a stream's size from its length or bitrate × duration.
- */
 export function estimateSize(format: MediaFormat, durationSec: number): number | undefined {
   if (format.contentLength) return format.contentLength;
   const bitrate = format.avgBitrate ?? format.bitrate;
@@ -41,17 +28,10 @@ export function estimateSize(format: MediaFormat, durationSec: number): number |
   return Math.round((bitrate * durationSec) / 8);
 }
 
-/**
- * This function is used for whether a format can be downloaded with the engine (has a direct URL).
- */
 export function isDownloadable(format: MediaFormat): boolean {
   return Boolean(format.url);
 }
 
-/**
- * This function is used for grouping video formats into de-duplicated qualities, best first:
- * by height, then frame rate, then HDR — listing the codecs available at each.
- */
 export function buildQualities(formats: MediaFormat[], durationSec: number): QualityOption[] {
   const usable = formats.some(isDownloadable) ? formats.filter(isDownloadable) : formats;
   const videos = usable.filter((f) => f.kind !== 'audio' && qualityHeight(f) > 0);
@@ -96,18 +76,12 @@ export function buildQualities(formats: MediaFormat[], durationSec: number): Qua
 /** Opus reaches AAC's quality at roughly 80% of the bitrate, so it ranks as if it had 25% more. */
 const OPUS_EFFICIENCY = 1.25;
 
-/**
- * This function is used for ranking audio sources by perceived quality: bitrate, adjusted for codec
- * efficiency (a 127 kbps Opus stream beats a 130 kbps AAC one as the source for an mp3).
- */
+/** Codec efficiency matters: Opus can beat higher-bitrate AAC as a conversion source. */
 export function audioScore(format: MediaFormat): number {
   const bitrate = format.avgBitrate ?? format.bitrate;
   return formatAudioCodec(format) === 'opus' ? bitrate * OPUS_EFFICIENCY : bitrate;
 }
 
-/**
- * This function is used for listing audio-only formats, best first (default track, non-DRC, quality).
- */
 export function buildAudioQualities(formats: MediaFormat[], durationSec: number): AudioQualityOption[] {
   const usable = formats.some(isDownloadable) ? formats.filter(isDownloadable) : formats;
   const audios = usable.filter((f) => f.kind === 'audio');

@@ -4,7 +4,6 @@ import { mkdir, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import type * as Undici from 'undici';
 import {
   fetchMediaChunks,
   DEFAULT_CHUNK_SIZE,
@@ -58,14 +57,14 @@ import type {
   VideoInfo,
 } from './types.js';
 import { loadCookies } from './utils/cookies.js';
+import { bundledCookies } from './utils/bundled-cookies.js';
 import { renderTemplate } from './utils/filename.js';
 import { defaultCacheDir, fileSize, moveFile, pathExists, removeQuietly } from './utils/fs.js';
 import { resolveRange, type ResolvedRange } from './utils/time.js';
 import { RequestGovernor } from './utils/governor.js';
 import { urlExpiresAt } from './utils/http.js';
+import { createProxyFetch } from './utils/proxy.js';
 import { parseTarget, parseVideoId } from './utils/url.js';
-
-//---- Section used for the public TubePull API ----
 
 export const DEFAULT_FILENAME_TEMPLATE = '{title} [{id}]';
 const PROGRESS_INTERVAL_MS = 100;
@@ -81,10 +80,6 @@ interface CachedExtraction {
   at: number;
 }
 
-/**
- * This function is used for whether a cached extraction can be reused: young enough, and its stream
- * URLs valid for a few more minutes.
- */
 function isFresh(entry: CachedExtraction, now = Date.now()): boolean {
   if (now - entry.at > EXTRACTION_TTL_MS) return false;
   const expiries = entry.video.info.formats
@@ -93,14 +88,8 @@ function isFresh(entry: CachedExtraction, now = Date.now()): boolean {
   return expiries.every((t) => t - now > URL_EXPIRY_MARGIN_MS);
 }
 
-/** A readable media stream with the format it carries. */
 export type TubePullStream = Readable & { format: MediaFormat; info: VideoInfo };
 
-/**
- * Download YouTube video or audio. Create with `await TubePull.create(options)`.
- *
- * Events: `progress` (per stage, ~10/s), `warning` (non-fatal notices), `retry` (network retries).
- */
 export class TubePull extends EventEmitter<TubePullEvents> {
   readonly #options: TubePullOptions;
   readonly #logger: Logger;
@@ -116,10 +105,7 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     this.#logger = options.logger ?? silentLogger;
   }
 
-  /**
-   * This function is used for creating an instance and validating cookies/proxy up front, so a bad
-   * cookies path fails here rather than on the first download.
-   */
+  /** Validate authentication and proxy settings before the first request. */
   static async create(options: TubePullOptions = {}): Promise<TubePull> {
     const instance = new TubePull(options);
     await instance.#init();
@@ -132,7 +118,12 @@ export class TubePull extends EventEmitter<TubePullEvents> {
       const fetchFn =
         options.fetch ?? (options.proxy ? await createProxyFetch(options.proxy) : globalThis.fetch);
       if (options.extractor) return { extractor: options.extractor, fetch: fetchFn };
-      const cookie = options.cookies ? await loadCookies(options.cookies) : undefined;
+      const cookie =
+        options.cookies === undefined
+          ? bundledCookies()
+          : options.cookies
+            ? await loadCookies(options.cookies)
+            : undefined;
       const cacheDir = options.cacheDir === false ? undefined : (options.cacheDir ?? defaultCacheDir());
       if (cacheDir) await mkdir(cacheDir, { recursive: true }).catch(() => undefined);
       const extractor = new YoutubeiExtractor({
@@ -155,9 +146,6 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return this.#ready;
   }
 
-  /**
-   * This function is used for locating ffmpeg (cached). Exposed for diagnostics.
-   */
   resolveFfmpeg(): Promise<ResolvedFfmpeg> {
     this.#ffmpeg ??= resolveFfmpeg(this.#options.ffmpegPath);
     this.#ffmpeg.catch(() => {
@@ -166,20 +154,11 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return this.#ffmpeg;
   }
 
-  /**
-   * This function is used for extractor details (engine version, clients) for diagnostics.
-   */
   async describeExtractor(): Promise<Record<string, string>> {
     const { extractor } = await this.#init();
     return extractor.describe();
   }
 
-  //---- Section used for inspection ----
-
-  /**
-   * This function is used for fetching metadata, the normalised format list, and the qualities that
-   * are actually available for a video.
-   */
   async getInfo(input: string, options: { signal?: AbortSignal } = {}): Promise<VideoInfo> {
     const target = parseTarget(input);
     if (!target.videoId) {
@@ -193,9 +172,6 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return this.#toInfo(await this.#extract(target.videoId, options.signal));
   }
 
-  /**
-   * This function is used for listing a playlist's videos from a playlist URL or ID.
-   */
   async getPlaylist(input: string, options: { signal?: AbortSignal } = {}): Promise<PlaylistInfo> {
     const raw = input.trim();
     const playlistId =
@@ -206,11 +182,7 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return extractor.getPlaylist(playlistId, options.signal);
   }
 
-  /**
-   * Extraction with a short-lived cache: getInfo → download, --list → download and batch retries reuse
-   * one answer while its stream URLs stay valid, instead of asking YouTube again. A refresh after a
-   * refused stream (`excludeClients`) always goes to YouTube.
-   */
+  /** Reuse fresh extractions; a refused stream always triggers a new request. */
   async #extract(videoId: string, signal?: AbortSignal, excludeClients?: string[]): Promise<ExtractedVideo> {
     throwIfAborted(signal);
     const { extractor } = await this.#init();
@@ -244,10 +216,7 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return info;
   }
 
-  /**
-   * Media request details for an info object. Re-extracts when the object did not come from this
-   * instance, or when its stream URLs expire within a few minutes (they last about six hours).
-   */
+  /** Re-extract foreign info objects and those with expiring stream URLs. */
   async #mediaFor(info: VideoInfo, signal?: AbortSignal): Promise<{ info: VideoInfo; media: MediaRequest }> {
     const media = this.#media.get(info);
     const expiries = info.formats.map((f) => urlExpiresAt(f.url)).filter((t): t is number => t !== undefined);
@@ -258,12 +227,6 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return { info: fresh, media: this.#media.get(fresh) as MediaRequest };
   }
 
-  //---- Section used for downloading ----
-
-  /**
-   * This function is used for downloading one video (merged video+audio) or its audio, at the
-   * requested quality and format, into `outputDir`.
-   */
   async download(input: string | VideoInfo, options: DownloadOptions = {}): Promise<DownloadResult> {
     const started = Date.now();
     const { signal } = options;
@@ -357,10 +320,7 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     }
   }
 
-  /**
-   * This function is used for downloading several videos and/or playlists with bounded concurrency.
-   * Playlist links are expanded; failures are reported per item instead of stopping the batch.
-   */
+  /** Preserve input order; individual failures do not stop the batch, but aborts do. */
   async downloadMany(
     inputs: string[],
     options: DownloadOptions & { concurrency?: number; onItemDone?: (item: BatchItemResult) => void } = {},
@@ -403,10 +363,7 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     });
   }
 
-  /**
-   * This function is used for streaming a single format (audio-only or a combined low-quality
-   * progressive stream) without ffmpeg.
-   */
+  /** Stream one existing format without ffmpeg; separate tracks are not merged. */
   async stream(input: string | VideoInfo, options: StreamOptions = {}): Promise<TubePullStream> {
     const { signal } = options;
     const initial = typeof input === 'string' ? await this.getInfo(input, { signal }) : input;
@@ -454,8 +411,6 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     const readable = Readable.from(generator, { objectMode: false });
     return Object.assign(readable, { format, info });
   }
-
-  //---- Section used for download internals ----
 
   /** Falls back to m4a when the ffmpeg build lacks the encoder for the requested audio format. */
   async #ensureEncoders(
@@ -528,8 +483,8 @@ export class TubePull extends EventEmitter<TubePullEvents> {
 
   #mediaSource(info: VideoInfo, media: MediaRequest, format: MediaFormat, signal?: AbortSignal): MediaSource {
     if (!format.url) throw new NetworkError(`itag ${format.itag} has no direct URL`);
-    // A refused stream usually means YouTube wants something this client cannot provide (e.g. a PO
-    // token), so the refresh re-extracts with that client tried last.
+    // Retry refused streams with their client last; the current client may require a PO token.
+
     const refused: string[] = [];
     let client = info.client;
     const source: MediaSource = {
@@ -558,10 +513,11 @@ export class TubePull extends EventEmitter<TubePullEvents> {
         if (differs)
           throw new NetworkError(`itag ${format.itag} changed on YouTube's side; retry the download`);
         this.#logger.debug(`itag ${format.itag} now served via client ${client ?? '?'}`);
-        return { url: match.url, headers: fresh.media.headers };
+        return { url: match.url, headers: fresh.media.headers, playableAt: fresh.media.playableAt };
       },
     };
     if (format.contentLength) source.contentLength = format.contentLength;
+    if (media.playableAt) source.playableAt = media.playableAt;
     return source;
   }
 
@@ -700,7 +656,7 @@ export class TubePull extends EventEmitter<TubePullEvents> {
     return tags;
   }
 
-  /** Downloads the largest thumbnail and converts it to JPEG. Failures only produce a warning. */
+  /** Thumbnail failures produce warnings without failing the download. */
   async #prepareCover(
     info: VideoInfo,
     ffmpeg: ResolvedFfmpeg,
@@ -798,33 +754,3 @@ export class TubePull extends EventEmitter<TubePullEvents> {
 }
 
 type ProgressReporter = (stage: Stage, bytes: number, total: number | undefined, force?: boolean) => void;
-
-/**
- * This function is used for a fetch that routes through an HTTP(S) proxy using undici's ProxyAgent
- * (undici's own fetch, so the dispatcher always matches the client).
- */
-async function createProxyFetch(proxy: string): Promise<typeof fetch> {
-  try {
-    new URL(proxy);
-  } catch {
-    throw new InvalidArgumentError(`Invalid proxy URL: ${proxy}`);
-  }
-  if (!/^https?:/i.test(proxy)) {
-    throw new InvalidArgumentError(`Unsupported proxy protocol in ${proxy}; use http:// or https://.`);
-  }
-  let undici: typeof Undici;
-  try {
-    undici = await import('undici');
-  } catch (cause) {
-    throw new InvalidArgumentError('Proxy support needs the optional "undici" package: npm i undici', {
-      cause,
-    });
-  }
-  const dispatcher = new undici.ProxyAgent(proxy);
-  const proxied = (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
-    undici.fetch(
-      input as never,
-      { ...(init as object), dispatcher } as never,
-    ) as unknown as Promise<Response>;
-  return proxied as typeof fetch;
-}

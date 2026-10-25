@@ -10,16 +10,11 @@ import {
 } from './compat.js';
 import { audioScore, fpsBucket, isDownloadable, qualityHeight } from './qualities.js';
 
-//---- Section used for quality selector parsing ----
-
 export type ParsedQuality =
   { kind: 'best' } | { kind: 'worst' } | { kind: 'height'; height: number; fps?: number };
 
 const ALIASES: Record<string, number> = { '8k': 4320, '4k': 2160, '2k': 1440, uhd: 2160, fhd: 1080, hd: 720 };
 
-/**
- * This function is used for parsing a quality selector (`best`, `worst`, `1080p`, `720p60`, `4k`).
- */
 export function parseQuality(selector: string | undefined): ParsedQuality {
   const value = (selector ?? '').trim().toLowerCase() || 'best';
   if (value === 'best' || value === 'highest') return { kind: 'best' };
@@ -35,11 +30,9 @@ export function parseQuality(selector: string | undefined): ParsedQuality {
   return fps === undefined ? { kind: 'height', height } : { kind: 'height', height, fps };
 }
 
-//---- Section used for format selection ----
-
 export interface VideoPlan {
   kind: 'video';
-  /** Video-only or muxed format. */
+
   video: MediaFormat;
   /** Separate audio to merge; absent when `video` is muxed. */
   audio?: MediaFormat;
@@ -79,10 +72,7 @@ type SelectOptions = Pick<
   | 'audioItag'
 >;
 
-/**
- * This function is used for resolving the best video + audio format pair (or audio-only format)
- * for the requested quality, container and codecs, deciding stream copy vs transcode.
- */
+/** Prefer stream copy; transcode only when explicitly allowed. */
 export function selectFormats(formats: MediaFormat[], options: SelectOptions = {}): SelectionPlan {
   const usable = formats.filter(isDownloadable);
   if (usable.length === 0) {
@@ -167,10 +157,7 @@ function selectVideo(formats: MediaFormat[], options: SelectOptions): VideoPlan 
   return plan;
 }
 
-/**
- * This function is used for narrowing video formats to one (height, fps, HDR) group per the selector,
- * falling back to the nearest lower height unless `strict`.
- */
+/** Fall back to the nearest lower quality unless strict. */
 function pickVideoGroup(formats: MediaFormat[], options: SelectOptions, warnings: string[]): MediaFormat[] {
   let candidates = formats.filter((f) => f.kind === 'video' && qualityHeight(f) > 0);
   if (candidates.length === 0) candidates = formats.filter((f) => f.kind === 'muxed' && qualityHeight(f) > 0);
@@ -221,10 +208,7 @@ function pickVideoGroup(formats: MediaFormat[], options: SelectOptions, warnings
   return atHeight.filter((f) => fpsBucket(f.fps) === fps);
 }
 
-/**
- * This function is used for ordering formats of one quality group: copy-compatible with the container
- * first, then codec preference, then bitrate.
- */
+/** Prefer compatible codecs to avoid unnecessary transcoding. */
 function rankVideo(group: MediaFormat[], container: Container, prefs: readonly VideoCodec[]): MediaFormat[] {
   const prefIndex = (codec: VideoCodec) => {
     const index = prefs.indexOf(codec);
@@ -242,9 +226,7 @@ function rankVideo(group: MediaFormat[], container: Container, prefs: readonly V
   });
 }
 
-/**
- * This function is used for matching an audio track against a language id or name (`en`, `de.3`, `German`).
- */
+/** Match a track's language ID or display name. */
 function matchesLanguage(format: MediaFormat, language: string): boolean {
   const track = format.audioTrack;
   if (!track) return false;
@@ -253,10 +235,7 @@ function matchesLanguage(format: MediaFormat, language: string): boolean {
   return id === wanted || id.split('.')[0] === wanted || track.name.toLowerCase().includes(wanted);
 }
 
-/**
- * This function is used for picking the best audio-only format: requested language (or the default
- * track), preferred codec, non-DRC, highest bitrate.
- */
+/** Prefer the requested/default language, then codec quality and non-DRC tracks. */
 function pickAudio(
   formats: MediaFormat[],
   language: string | undefined,

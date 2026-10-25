@@ -3,8 +3,6 @@ import { access, chmod, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { FfmpegNotFoundError } from '../errors.js';
 
-//---- Section used for locating the ffmpeg binary ----
-
 export type FfmpegSource = 'option' | 'env' | 'ffmpeg-static' | 'path';
 
 export interface ResolvedFfmpeg {
@@ -14,10 +12,7 @@ export interface ResolvedFfmpeg {
 
 export const FFMPEG_ENV = 'TUBEPULL_FFMPEG_PATH';
 
-/**
- * This function is used for checking a candidate binary exists and is executable, fixing a missing
- * exec bit on Linux/macOS (lost when node_modules is copied around).
- */
+/** Restore executable permissions lost when node_modules is copied. */
 export async function ensureExecutable(file: string): Promise<boolean> {
   try {
     if (!(await stat(file)).isFile()) return false;
@@ -39,9 +34,7 @@ export async function ensureExecutable(file: string): Promise<boolean> {
   }
 }
 
-/**
- * This function is used for finding an executable on PATH (honouring PATHEXT on Windows).
- */
+/** Honor PATHEXT when searching on Windows. */
 export async function findOnPath(
   command: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -58,10 +51,7 @@ export async function findOnPath(
   return undefined;
 }
 
-/**
- * This function is used for the path ffmpeg-static would provide, or undefined if the package or its
- * binary is missing (e.g. install scripts were skipped).
- */
+/** Optional installs may omit the package or its downloaded binary. */
 export async function ffmpegStaticPath(): Promise<string | undefined> {
   try {
     const mod = (await import('ffmpeg-static')) as { default?: unknown };
@@ -72,10 +62,7 @@ export async function ffmpegStaticPath(): Promise<string | undefined> {
   }
 }
 
-/**
- * This function is used for resolving ffmpeg in priority order: explicit option, `TUBEPULL_FFMPEG_PATH`,
- * the bundled ffmpeg-static binary, then `ffmpeg` on PATH.
- */
+/** Resolve explicit path, environment, bundled binary, then PATH. */
 export async function resolveFfmpeg(
   explicit?: string,
   env: NodeJS.ProcessEnv = process.env,

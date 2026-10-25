@@ -1,11 +1,6 @@
-//---- Section used for transfer speed and throttling ----
-
 const WINDOW_MS = 5_000;
 
-/**
- * Sliding-window speed meter: speed over the last few seconds, so the ETA reacts to throttling
- * without jumping around on every packet.
- */
+/** A sliding window keeps ETA responsive without reacting to every packet. */
 export class SpeedMeter {
   readonly #samples: { t: number; bytes: number }[] = [];
   readonly #now: () => number;
@@ -14,7 +9,6 @@ export class SpeedMeter {
     this.#now = now;
   }
 
-  /** Record the absolute byte count at the current time. */
   record(bytes: number): void {
     const t = this.#now();
     this.#samples.push({ t, bytes });
@@ -30,7 +24,6 @@ export class SpeedMeter {
     return ((last.bytes - first.bytes) * 1000) / (last.t - first.t);
   }
 
-  /** Seconds remaining for `total`, or undefined. */
   eta(total: number | undefined, bytes: number): number | undefined {
     const speed = this.speed;
     if (!total || !speed || speed <= 0) return undefined;
@@ -38,10 +31,7 @@ export class SpeedMeter {
   }
 }
 
-/**
- * This function is used for limiting how often a callback fires (progress events ~10/s), while always
- * letting a forced/final call through.
- */
+/** Forced and final progress updates bypass throttling. */
 export function createThrottle(
   intervalMs: number,
   now: () => number = Date.now,

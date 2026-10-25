@@ -1,7 +1,6 @@
 import type { MediaFormat } from '../../src/types.js';
 
-// A realistic adaptive format list (itags, codecs and bitrates as YouTube serves them for a 4K60 upload),
-// already normalised. Durations assume a 600 s video.
+// Normalized 4K60 fixture; sizes assume a 600-second video.
 
 const U = (itag: number) =>
   `https://rr1---sn-test.googlevideo.com/videoplayback?itag=${itag}&expire=9999999999`;

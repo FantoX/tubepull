@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { mapThrown } from '../../src/extractor/playability.js';
 import { isNThrottled, urlExpiresAt, withRequestTimeout } from '../../src/utils/http.js';
 
-/** A fetch that never answers until its signal fires. */
 const hangingFetch = ((_input: unknown, init?: RequestInit) =>
   new Promise((_resolve, reject) => {
     init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));

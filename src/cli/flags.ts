@@ -3,8 +3,6 @@ import { parseQuality } from '../selector/select.js';
 import type { AudioFormat, Container, DownloadOptions, QualitySelector, TubePullOptions } from '../types.js';
 import { parseTime } from '../utils/time.js';
 
-//---- Section used for CLI flag parsing ----
-
 /** Raw options as cac hands them over (camelCased; numbers may arrive as numbers). */
 export interface RawFlags {
   quality?: string | number;
@@ -27,6 +25,7 @@ export interface RawFlags {
   playlist?: boolean;
   concurrency?: string | number;
   cookies?: string;
+  anonymous?: boolean;
   proxy?: string;
   poToken?: string;
   visitorData?: string;
@@ -68,9 +67,6 @@ function int(value: string | number | undefined, name: string): number | undefin
   return Number(s);
 }
 
-/**
- * This function is used for validating raw CLI flags and turning them into library options.
- */
 export function parseFlags(raw: RawFlags, env: NodeJS.ProcessEnv = process.env): CliSettings {
   const download: DownloadOptions = {};
   const instance: TubePullOptions = {};
@@ -146,7 +142,10 @@ export function parseFlags(raw: RawFlags, env: NodeJS.ProcessEnv = process.env):
     throw new InvalidArgumentError('--concurrency must be between 1 and 16.');
 
   const cookies = str(raw.cookies);
-  if (cookies !== undefined) instance.cookies = cookies;
+  if (raw.anonymous && cookies !== undefined)
+    throw new InvalidArgumentError('Use either --cookies or --anonymous, not both.');
+  if (raw.anonymous) instance.cookies = false;
+  else if (cookies !== undefined) instance.cookies = cookies;
   const proxy = str(raw.proxy) ?? env.HTTPS_PROXY ?? env.https_proxy ?? env.HTTP_PROXY ?? env.http_proxy;
   if (proxy) instance.proxy = proxy;
   const poToken = str(raw.poToken);
